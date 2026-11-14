@@ -1,0 +1,2 @@
+{ "name": "psi-si-engine", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": { "build:bundle": "python3 scripts/build_bundle.py", "test": "node --test test/si.test.js", "dev": "node dev/server.js" } }

@@ -4,6 +4,19 @@ An interactive, single-file dashboard built by **Team Combustion Dynamics** for 
 
 > **Scientific stance:** accuracy over impressive charts. Only values present in the source files are plotted. Every chart and finding is labelled by evidence type (measured CSV data, report-derived, plan/metadata) with provenance. The dashboard states plainly what the data cannot answer. **None of the integrated datasets is a partial-gravity (lunar 0.16 g / Mars 0.38 g) combustion dataset.**
 
+## Two dashboards in this repository
+| | Original dashboard (v1, **frozen**) | SI dashboard (release candidate, **not deployed**) |
+|---|---|---|
+| File | `index.html` = `psi-hub.html` (root) | `si-release/dashboard/si.html` |
+| Data | Arrays embedded from `src/` | Evidence store v1.1, pinned by SHA-256 `a77e5548…aed548` (bundled into `si-release/si-api/src/bundle.js`) |
+| Network | None | Calls the SI Worker API (`/v1/health`, `/v1/ask`) at a configurable address; works offline as evidence-only |
+| AI | None (rule-based ranker) | Cloudflare Workers AI, Llama 3.3 70B, behind a code validator; evidence-only fallback when the model is unavailable or rejected |
+| Status | Live via GitHub Pages | **Real Cloudflare inference not yet tested. Nothing authorized for deployment.** |
+
+The original dashboard stays the default page and the fallback. The SI dashboard links back to it ("Original dashboard" → `index.html`). See `HANDOFF.md` section 0 for the SI architecture, verification record and remaining steps.
+
+> The SI dashboard is a retrieval-and-explanation tool over the evidence store. It does **not** predict lunar or Martian fire risk, and its answers inherit every limitation below (the evidence store carries 23 first-class limitations, LIM-001 to LIM-023).
+
 ## Challenge objectives addressed
 - Build a tool that helps researchers explore PSI combustion investigations relevant to fire safety in exploration habitats.
 - Query investigations by question, atmosphere (O2, pressure) and safety goal (prevention / detection / suppression).
@@ -35,6 +48,8 @@ Background-only entries (no dataset integrated): SAME, BASS, SoFIE, FM2, FLARE, 
 - SAME-R gives smoke-particle data only: **no detector sensitivity, response time or false-alarm data**.
 - SAFFIRE-II is n = 1 per condition: observations, not statistically conclusive.
 - No partial-gravity data anywhere. See `HANDOFF.md` for the full list.
+- The Habitat Simulator shows condition similarity only; it is **not** a validated fire-risk probability model.
+- PSI-98 thickness units (header "cm" vs SAFFIRE-II DoD "mm") and the SAFFIRE-II CSV/DoD discrepancies are **unresolved**; nothing converts or reconciles them (SI limitations LIM-008, LIM-009).
 
 ## Run locally
 The app is one self-contained file: no build step, no CDN, no network calls, no dependencies.
@@ -60,15 +75,39 @@ src/data2.js        Embedded SAFFIRE-II, FLEX, SAME-R arrays
 src/app3.js         All application logic (the three files above are concatenated into the HTML as <script> blocks)
 src/test_playwright.py  Headless regression test used during QC
 data/               Intentionally empty (see data/README.md and HANDOFF.md section 10)
-HANDOFF.md          Architecture, provenance, limitations, backend/SI plan, deployment
+HANDOFF.md          Architecture, provenance, limitations, SI integration record, deployment
+
+si-release/                 SI release candidate, copied byte-for-byte from si-release-candidate.zip
+  SHA256SUMS.txt            The release's own manifest (verify from inside si-release/)
+  dashboard/si.html         Four-section SI dashboard (unconfigured: API address placeholder)
+  si-api/                   Cloudflare Worker: worker.js, wrangler.toml, package.json, DEPLOY.md, TERMS_REVIEW.md
+    src/                    core.js (HTTP, fallback), retrieve.js (deterministic retrieval), provider.js
+                            (Workers AI / Gemini / OpenAI-compatible), validate.js (citation + number verifier),
+                            bundle.js (GENERATED from evidence store v1.1; do not edit)
+    .gitignore              Added at integration: keeps .dev.vars, .env, .wrangler/, node_modules/ out of git
+si-integration/             Added at integration (not part of the release candidate)
+  worker_smoke.test.mjs     node:test smoke tests of the Worker with a MOCK AI binding
+  test_si_dashboard.py      Playwright smoke test of si.html, wired to the Worker code locally
+  local_worker_server.mjs   Node wrapper around the Worker for local wiring tests (no AI binding)
+  configure_dashboard.sh    Writes si-integration/build/si.html with the Worker URL filled in
 ```
+The SI evidence store v1.1 itself (`si-evidence/`) and the SI build/test/eval tooling (`si-engine/scripts/`, `si-engine/test/`, `si-engine/dev/`) were **not** in the supplied ZIP; see HANDOFF.md section 0.4.
 **`psi-hub.html` is canonical.** The `src/` files are the exact script contents embedded in it (verified as substrings), provided for easier diffing and editing. If you edit `src/`, rebuild the HTML (see HANDOFF.md) and update the checksum.
 
 ## Deploy
 See "Deployment" in `HANDOFF.md` (GitHub Pages workflow included at `.github/workflows/pages.yml`; Cloudflare Pages instructions also provided).
 
+**Note:** `.github/workflows/pages.yml` is active. It runs on every push to `main` and publishes `index.html` only. It does not publish `si.html` or the Worker. Merging the SI integration therefore redeploys the unchanged original dashboard and nothing else.
+
+## SI tests and real-model evaluation
+```bash
+node --test si-integration/worker_smoke.test.mjs        # Worker, mock AI binding, no network
+python3 si-integration/test_si_dashboard.py             # SI dashboard in headless Chromium
+```
+Real Cloudflare inference: HANDOFF.md section 0.6.
+
 ## Data and attribution
 Data originate from NASA's Physical Sciences Informatics repository. Confirm each dataset's DOI and terms of use at the PSI site and cite them in any publication; DOIs were not embedded in this handoff.
 
-## Regression test (optional)
+## Regression test for the original dashboard (optional)
 `pip install playwright && playwright install chromium && python3 src/test_playwright.py`
