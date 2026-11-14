@@ -1,0 +1,28 @@
+# SI API Worker (corrected release r2). Deployable from the Cloudflare dashboard via Workers Builds
+# (Git integration) with Root directory = si/worker. See si/worker/DEPLOY.md.
+# The Worker name below must equal the Worker name you create in the Cloudflare dashboard.
+name = "psi-si-api"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+workers_dev = true
+
+[vars]
+SI_PROVIDER = "workers_ai"
+WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+GEMINI_MODEL = "gemini-2.5-flash"
+# Exact browser origin of the published SI dashboard (scheme + host, no path, no trailing slash).
+# GitHub Pages for this repository serves from https://ashwinjecku27.github.io (path /combustion-dynamics-psi-hub/ is NOT part of the origin).
+# Browser requests from any other origin get HTTP 403. Requests without an Origin header (curl, the GitHub Actions evaluation) are allowed;
+# CORS is not authentication, the rate limits below and the Workers AI daily allocation are the cost controls.
+ALLOWED_ORIGIN = "https://ashwinjecku27.github.io"
+# Best-effort, in-memory limits, counted per Worker instance (not global). See DEPLOY.md section 5.
+SI_DAILY_CAP = "300"
+SI_PER_IP_PER_MIN = "6"
+
+[ai]
+binding = "AI"
+
+# No secrets are needed for Workers AI (the AI binding uses the account the Worker is deployed to).
+# Gemini is NOT used by default (see TERMS_REVIEW.md). If it is ever authorised, set SI_PROVIDER = "gemini" above and add the
+# secret GEMINI_API_KEY in the Cloudflare dashboard: Worker > Settings > Variables and Secrets > Add > type "Secret".
+# Never put a key in this file.

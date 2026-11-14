@@ -1,4 +1,5 @@
-"""Headless smoke test for the SI dashboard (si-release/dashboard/si.html).
+"""Headless smoke test for the SI dashboard (si/dashboard/si.html, corrected release r2).
+The original release candidate file (si-release/dashboard/si.html) is kept unchanged and is known to overflow at 390 px.
 Written during repository integration; NOT the release candidate's own test suite.
 Checks: four sections render without page errors; 'Original dashboard' link targets index.html;
 unconfigured build refuses to call any API; with ?si_api=http://localhost:PORT the page talks to the
@@ -27,7 +28,7 @@ async def main():
     def check(cond, msg):
         print(('PASS ' if cond else 'FAIL ') + msg)
         if not cond: fails.append(msg)
-    page_url = f'http://127.0.0.1:{web_port}/si-release/dashboard/si.html'
+    page_url = f'http://127.0.0.1:{web_port}/si/dashboard/si.html'
     try:
         async with async_playwright() as p:
             b = await p.chromium.launch()
@@ -60,12 +61,36 @@ async def main():
             check('No AI model was used' in out or 'not an AI answer' in out, 'fallback rendered and labelled as not AI')
             check('LIM-001' in out, 'partial-gravity question cites LIM-001')
             check(not errs2, f'no page errors (wired): {errs2}')
-            # Mobile overflow
-            m = await b.new_page(viewport={'width': 390, 'height': 800}); await m.goto(page_url); await m.wait_for_timeout(300)
-            for i in range(4):
-                await m.locator('#nav button').nth(i).click(); await m.wait_for_timeout(150)
-                ov = await m.evaluate('document.documentElement.scrollWidth > document.documentElement.clientWidth + 1')
-                check(not ov, f'no horizontal overflow at 390px, section {i}')
+            # Horizontal overflow: every section, and every investigation in the Explorer, at phone, tablet and desktop widths
+            for w in (360, 390, 768, 1100, 1440):
+                m = await b.new_page(viewport={'width': w, 'height': 800}); await m.goto(page_url); await m.wait_for_timeout(200); bad = []
+                for i in range(4):
+                    await m.locator('#nav button').nth(i).click(); await m.wait_for_timeout(100)
+                    n = await m.locator('.list button').count() if i == 2 else 1
+                    for k in range(n):
+                        if i == 2: await m.locator('.list button').nth(k).click(); await m.wait_for_timeout(60)
+                        if await m.evaluate('document.documentElement.scrollWidth > document.documentElement.clientWidth + 1'): bad.append((i, k))
+                check(not bad, f'no horizontal overflow at {w}px (4 sections, 6 investigations){": " + str(bad) if bad else ""}')
+                await m.close()
+            # Ask SI answer area at phone width (fallback lists citation chips with long ids)
+            m = await b.new_page(viewport={'width': 390, 'height': 800}); await m.goto(page_url + f'?si_api=http://localhost:{api_port}')
+            await m.locator('#nav button').nth(1).click(); await m.fill('#si-q', 'What does SAME-R reveal about smoke particle characteristics?'); await m.click('#si-go')
+            await m.wait_for_function("document.querySelector('#si-out').innerText.length>40 && !/Retrieving evidence/.test(document.querySelector('#si-out').innerText)", timeout=10000)
+            check(not await m.evaluate('document.documentElement.scrollWidth > document.documentElement.clientWidth + 1'), 'no horizontal overflow at 390px with an evidence-only answer shown')
+            await m.close()
+            # Desktop rendering of r2 must be pixel-identical to the original release candidate (fix is narrow-screen only)
+            import hashlib
+            async def shots(url):
+                pg3 = await b.new_page(viewport={'width': 1100, 'height': 900}); await pg3.goto(url); await pg3.wait_for_timeout(200); hs = []
+                for i in range(4):
+                    await pg3.locator('#nav button').nth(i).click(); await pg3.wait_for_timeout(100)
+                    n = await pg3.locator('.list button').count() if i == 2 else 1
+                    for k in range(n):
+                        if i == 2: await pg3.locator('.list button').nth(k).click(); await pg3.wait_for_timeout(60)
+                        hs.append(hashlib.sha256(await pg3.screenshot(full_page=True)).hexdigest())
+                await pg3.close(); return hs
+            a, c = await shots(f'http://127.0.0.1:{web_port}/si-release/dashboard/si.html'), await shots(page_url)
+            check(len(a) == 9 and a == c, f'desktop 1100px: r2 pixel-identical to the release candidate in {sum(x == y for x, y in zip(a, c))}/{len(a)} views')
             await b.close()
     finally:
         api.terminate(); httpd.shutdown()

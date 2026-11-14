@@ -1,4 +1,4 @@
-// Integration smoke tests for the SI release candidate Worker (si-release/si-api).
+// Integration smoke tests for the SI release candidate Worker (si/worker, corrected release r2; src/ is byte-identical to si-release/si-api/src).
 // Written during repository integration; they are NOT the release candidate's own
 // test suite (test/si.test.js was not included in the supplied ZIP).
 // They import the release-candidate code unmodified and use a MOCK env.AI binding.
@@ -6,8 +6,8 @@
 // Run: node --test si-integration/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handleRequest } from '../si-release/si-api/src/core.js';
-import B from '../si-release/si-api/src/bundle.js';
+import { handleRequest } from '../si/worker/src/core.js';
+import B from '../si/worker/src/bundle.js';
 
 const STORE_SHA = 'a77e55486a4d25f0c284c3467b485f9cc3aeded142a285a9e346357870aed548';
 let ipN = 0; // core.js rate-limits 6/min per IP; give each request its own IP
@@ -92,4 +92,26 @@ test('HTTP guards: CORS origin, bad input, unknown path', async () => {
   assert.equal(ok.headers.get('access-control-allow-origin'), 'https://example.github.io');
   assert.equal((await ask(baseEnv, 'hi')).status, 400);
   assert.equal((await handleRequest(new Request('http://w/nope'), baseEnv)).status, 404);
+});
+
+test('corrected release r2: Worker source is byte-identical to the original release candidate', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const f of ['src/bundle.js', 'src/core.js', 'src/provider.js', 'src/retrieve.js', 'src/validate.js', 'worker.js', 'TERMS_REVIEW.md']) {
+    const a = await readFile(new URL('../si-release/si-api/' + f, import.meta.url)); const b = await readFile(new URL('../si/worker/' + f, import.meta.url));
+    assert.ok(a.equals(b), f + ' differs from the release candidate');
+  }
+});
+
+test('r2 wrangler.toml: AI binding, exact Pages origin, no secrets', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const t = await readFile(new URL('../si/worker/wrangler.toml', import.meta.url), 'utf8');
+  assert.match(t, /^name = "psi-si-api"$/m); assert.match(t, /^main = "worker.js"$/m);
+  assert.match(t, /^\[ai\]\nbinding = "AI"$/m);
+  assert.match(t, /^ALLOWED_ORIGIN = "https:\/\/ashwinjecku27\.github\.io"$/m);
+  assert.match(t, /^SI_PROVIDER = "workers_ai"$/m);
+  assert.doesNotMatch(t, /^\s*(GEMINI_API_KEY|OPENAI_COMPAT_API_KEY|CLOUDFLARE_API_TOKEN|account_id)\s*=/m);
+  // the exact origin the browser sends is accepted; a path or trailing slash variant would not be
+  const env = { ...baseEnv, ALLOWED_ORIGIN: 'https://ashwinjecku27.github.io' };
+  assert.equal((await ask(env, 'What does FLEX tell us?', { origin: 'https://ashwinjecku27.github.io' })).status, 200);
+  assert.equal((await ask(env, 'What does FLEX tell us?', { origin: 'https://someone-else.github.io' })).status, 403);
 });

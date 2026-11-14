@@ -8,24 +8,38 @@ Written so another coding agent can continue this project without the original C
 - No API keys, credentials or secrets exist in this repo or in the app. Keep it that way (see section 6 for backend secrets).
 - **State at handoff:** a scientific QC pass was completed and published. Verified in headless Chromium only (no JS errors, no overflow at 390 px). **A real-browser visual check was not done** (no browser was connectable); do this first.
 
-## 0. SI release candidate: integration record (2026-11-14)
+## 0. SI (Scientific Intelligence): integration record
 
-Sections 1 to 11 below describe the **frozen original dashboard** and are unchanged. This section describes the SI (Scientific Intelligence) release candidate added alongside it.
+Sections 1 to 11 below describe the **frozen original dashboard** and are unchanged. This section describes the SI
+release added alongside it. Last updated 2026-11-14 (corrected release r2).
 
 ### 0.1 Status
-- **Integrated, not deployed.** No Worker has been deployed and no `si.html` has been published. Deployment needs explicit authorization.
-- **Real Cloudflare Workers AI inference has NOT been tested.** Every test so far uses a mock AI binding or no binding (evidence-only fallback). Real output quality, JSON-schema support for this model, neuron usage and the Workers CPU limit are unverified.
-- Original dashboard (`index.html`, `psi-hub.html`, `src/`, `data/README.md`, workflow): **byte-unchanged**. 8 of the 9 entries in `SHA256SUMS.txt` verify. The ninth, `.gitignore`, is listed but was never committed to the repository. That gap predates this integration and is unrelated to it. No root `.gitignore` was added, because the original content is unknown and a new file would not match the recorded hash.
+- **Integrated, not deployed.** No Worker has been deployed, no `si.html` has been published and no Cloudflare resource exists. Each deployment step needs explicit authorization (`si/worker/DEPLOY.md`).
+- **Real Cloudflare Workers AI inference has NOT been run.** Every test so far used a mock AI binding or none. The evaluation script exists and is tested, but has never been pointed at a real Worker. Still unverified:
+  - real answer quality;
+  - JSON-schema support for this model;
+  - neuron usage;
+  - Workers CPU time.
+- **Original dashboard is byte-unchanged:** `index.html`, `psi-hub.html`, `src/`, `data/README.md` and `.github/workflows/pages.yml`. 8 of the 9 entries in `SHA256SUMS.txt` verify. The ninth, `.gitignore`, was listed but never committed to the repository; that predates the SI work. No root `.gitignore` was added, because it could not match the recorded hash.
 
-### 0.2 Provenance of the SI files
-- Source: `si-release-candidate.zip`, produced in a separate Claude session and supplied by the team. ZIP SHA-256 `63c74b45d1e0c7d6fd1508017d99c3ed15aa0c113d4698b424b57722b6ea9dd6` (54,809 bytes, 16 entries).
-- The ZIP's `release/` folder was copied **byte-for-byte** to `si-release/` (`diff -r` identical). From inside `si-release/`, `sha256sum -c SHA256SUMS.txt` reports all 11 content files OK. The manifest's own line (`./SHA256SUMS.txt`, hash `e3b0c442…b855`, the empty-file hash) fails by construction: the manifest was hashed while it was still empty. This is not a content discrepancy.
-- One file was added inside `si-release/`: `si-api/.gitignore` (keeps `.dev.vars`, `.env*`, `.wrangler/`, `node_modules/` out of git). It is not in the release manifest and does not affect it.
-- No release-candidate file was modified.
+### 0.2 Layout and provenance
+| Path | What | Status |
+|---|---|---|
+| `si-release/` | `si-release-candidate.zip` → `release/`, byte-for-byte. ZIP SHA-256 `63c74b45d1e0c7d6fd1508017d99c3ed15aa0c113d4698b424b57722b6ea9dd6`, 16 entries. | **Frozen.** Its 11 content files verify against its own `SHA256SUMS.txt`. The manifest's line for itself carries the empty-file hash `e3b0c442…` (it was hashed while still empty), so only that line fails. Only `si-api/.gitignore` was added. |
+| `si/` | **Corrected release r2**: the copy to deploy and evaluate. | Manifest `si/SHA256SUMS.txt`; every difference from `si-release/` is listed in `si/CHANGES.md`. |
+| `si-integration/` | Integration tests and helpers. | Not part of either release. |
+
+r2 in short:
+- **Unchanged:** the Worker code (`src/*.js`, `worker.js`) and `bundle.js` are byte-identical to the release candidate, and a test asserts it.
+- **Dashboard:** `si.html` gains one narrow-screen CSS block (0.5).
+- **`wrangler.toml`:** gets the real Pages origin.
+- **New files:** the evaluation script and its tests, the evidence cross-checks, and a browser-only `DEPLOY.md`.
+
+No scientific content, limitation, prompt, retrieval or validation rule was changed.
 
 ### 0.3 Architecture
 ```
-Browser                                    Cloudflare Worker "psi-si-api" (si-release/si-api)
+Browser                                    Cloudflare Worker "psi-si-api" (si/worker; Workers Builds root dir)
 index.html  (original, offline, frozen)
    ^ "Original dashboard" link
 si.html  --GET /v1/health--------------->  core.js handleRequest: CORS (ALLOWED_ORIGIN), size/shape checks,
@@ -39,90 +53,84 @@ si.html  --GET /v1/health--------------->  core.js handleRequest: CORS (ALLOWED_
                                                appear in the pack, banned claims ("proves", "guarantees", efficacy...)
                                             -> pass: mode "model"; fail twice / no binding / provider error / quota:
                                                mode "fallback" = retrieved evidence only, labelled "No AI model was used"
+GitHub Actions "SI real-model evaluation" --(no Origin header)--> same API; writes si/worker/test/real_eval_report.*
 ```
-- **Evidence store v1.1** is pinned by `store_sha256 = a77e55486a4d25f0c284c3467b485f9cc3aeded142a285a9e346357870aed548`, which is embedded in `si-api/src/bundle.js` and in `si.html` and reported by `/v1/health`. `bundle.js` is generated (header: "GENERATED by scripts/build_bundle.py from si-evidence store v1.1. Do not edit"). It holds 6 investigations, 34 passages, 23 limitations, 22 comparison rules, 10 calculations and 797 record IDs.
-- **Calculations are deterministic** and precomputed in the store (`calc:*`). The model is instructed never to calculate, and the validator rejects numbers that are not in the evidence pack.
-- **No secrets.** Workers AI is reached through the `[ai] binding = "AI"` in `wrangler.toml`, so no API key exists. The optional Gemini provider would use a Worker secret (`npx wrangler secret put GEMINI_API_KEY`). It is **not** the default and is not recommended for a public site (see `si-api/TERMS_REVIEW.md`).
+- **Evidence store v1.1** is pinned by `store_sha256 = a77e55486a4d25f0c284c3467b485f9cc3aeded142a285a9e346357870aed548`. The hash is embedded in `bundle.js` and `si.html` and reported by `/v1/health`. `bundle.js` is generated and reduced: 6 investigations, 34 passages, 23 limitations, 22 comparison rules, 10 calculations, and 797 record ids. Full records are included only for PSI-98 and PSI-99.
+- **Calculations are deterministic** and precomputed in the store. The model is told never to calculate, and the validator rejects numbers that are not in the evidence pack.
 - **API address (configurable).** `si.html` resolves `SI_API_BASE` in this order:
-  1. `?si_api=` query parameter (accepted only for `http://localhost` or `127.0.0.1`, for local testing);
-  2. `window.SI_API_BASE`, if a script sets it before the app script;
-  3. the build placeholder `__SI_API_BASE__`. While the placeholder is unreplaced, the Ask SI section makes no request and says the service is not configured.
+  1. `?si_api=` (localhost only, for testing);
+  2. `window.SI_API_BASE`;
+  3. the `__SI_API_BASE__` placeholder. While the placeholder is unreplaced, Ask SI sends nothing and says the service is not configured.
 
-  To fill the placeholder, run `bash si-integration/configure_dashboard.sh https://psi-si-api.<you>.workers.dev`. It writes `si-integration/build/si.html` (git-ignored) and leaves the verified release file untouched.
-- **Record counts vs the original dashboard.** The store has 207 PSI-10 records versus 147 in the original dashboard. LIM-003 explains this: 60 ramped rows plus 147 steady rows. The other counts match (PSI-159 179, PSI-69 274, PSI-101 109). The store also holds reference, DoD and note rows for PSI-98 (4) and PSI-99 (24). Its sample counts match the original: 2 and 9.
+  To fill the placeholder, run the **SI dashboard build (manual)** workflow or `si-integration/configure_dashboard.sh`. Both write a copy; `si/dashboard/si.html` stays unconfigured.
+- **Worker configuration review (`si/worker/wrangler.toml`, `src/core.js`):**
+  - **Secrets:** none needed. Workers AI uses the `[ai] binding = "AI"`. The optional Gemini provider would use a Worker secret; it is not the default and not recommended for a public site (`TERMS_REVIEW.md`). A secret scan of the tree found nothing, and `.gitignore` covers `.dev.vars`, `.env*` and `.wrangler/`.
+  - **CORS:** `ALLOWED_ORIGIN` was a placeholder that would have blocked every browser request; it is now `https://ashwinjecku27.github.io`, the exact GitHub Pages origin, with no path. Other browser origins get 403. Requests without an Origin header are allowed, because CORS is not authentication.
+  - **Rate limits:** 6/min per IP and 300/day, held in memory per Worker instance, so best-effort rather than global. The real cost ceiling is the Workers AI free allocation of 10,000 neurons/day; when it is exhausted the Worker falls back to evidence only. Cloudflare WAF rate-limit rules apply to zones (custom domains), not to `workers.dev`.
+  - **Input limits:** the body must be at most 2,000 characters and the question 5 to 500. Only `GET /v1/health`, `POST /v1/ask` and `OPTIONS` are served. Error responses do not leak provider details.
+  - No code change was needed. The configuration change is in `wrangler.toml` only.
+- **Deployment without local software.** Cloudflare **Workers Builds** connects the GitHub repository (root directory `si/worker`, deploy command `npx wrangler deploy`). Evaluation and dashboard builds run in **GitHub Actions** or a **GitHub Codespace**. Steps: `si/worker/DEPLOY.md`.
+- **Record counts vs the original dashboard:** PSI-10 has 207 records in the store vs 147 in v1 (LIM-003: 60 ramped plus 147 steady rows). The other counts match: PSI-159 179, PSI-69 274, PSI-101 109. PSI-98 and PSI-99 add reference, DoD and note rows; their sample counts (2 and 9) match.
 
-### 0.4 Missing from the supplied ZIP (referenced by `si-api/DEPLOY.md`)
-DEPLOY.md was written for a source tree (`si-engine/`, `si-evidence/`) that is not in the ZIP. The ZIP contains only the built release. Missing:
-
-| Missing item | Consequence |
+### 0.4 Missing from the supplied ZIP, and what was done about each
+| Missing item | Status in this repository |
 |---|---|
-| `si-evidence/` (the original evidence store v1.1 files and their checksums) | The store's SHA-256 `a77e5548…` cannot be re-verified against source files here. Only the derived `bundle.js` is present. **Not regenerated or substituted.** |
-| `scripts/build_bundle.py` | `bundle.js` cannot be rebuilt (`npm run build:bundle` fails). |
-| `scripts/real_eval.mjs` | The documented real-model evaluation (six competition questions plus two extras, x3, writing `test/real_eval_report.md/json`) cannot be run. Section 0.6 gives a manual fallback. |
-| `scripts/build_release.sh` | Replaced for its one documented job (placeholder substitution) by `si-integration/configure_dashboard.sh`. |
-| `test/si.test.js` | The release candidate's own unit tests (`npm test`) cannot run. The smoke tests in `si-integration/` are a partial substitute, not a replacement. |
-| `dev/server.js` | `npm run dev` fails. `si-integration/local_worker_server.mjs` serves the same purpose for local wiring tests (no AI). |
+| `si-evidence/`: the original evidence store v1.1 files and their checksums | **Still missing. Not regenerated or substituted.** `si/evidence/verify_embedded.mjs` checks the embedded copy: 26 PASS, 1 DIFF (missing-value representation only), 0 FAIL, 4 NOT VERIFIABLE. `si/evidence/README.md` lists exactly what can and cannot be verified. The hash `a77e5548…` is a declared value only. |
+| `scripts/real_eval.mjs` | **New implementation** at `si/worker/scripts/real_eval.mjs`, with 13 tests. It is not a recovered copy of the original. |
+| `scripts/build_bundle.py` | Missing. `bundle.js` cannot be rebuilt, and it is used as supplied. |
+| `scripts/build_release.sh` | Replaced for its one job (placeholder substitution) by `si-integration/configure_dashboard.sh` and the dashboard build workflow. |
+| `test/si.test.js` | Missing. The smoke tests cover part of the same ground; they do not replace it. |
+| `dev/server.js` | Missing. Local wiring tests use `si-integration/local_worker_server.mjs` instead. |
 
-To complete the integration, add the release candidate's source tree (at least `si-evidence/` with its checksum file, `scripts/`, `test/`, `dev/`) under `si-release/` without modifying the existing files.
-
-### 0.5 Tests (run 2026-11-14 in a Linux container: Node 22.23.4, Python Playwright 1.63.0, headless Chromium)
+### 0.5 Tests (2026-11-14, Linux container: Node 22.23.4, Python Playwright 1.63.0, headless Chromium). The same suites run in CI (`.github/workflows/si-tests.yml`).
 | Suite | Result |
 |---|---|
-| `python3 src/test_playwright.py` (original dashboard) | Pass: no page errors, no 390 px overflow. Counts as in section 4 (FLEX 274, SAME-R 67/109, lunar preset 8 FLEX rows, 11 insights). |
-| `node --test si-integration/worker_smoke.test.mjs` | 9/9 pass. Covers: bundle pins store v1.1 and keeps LIM-001/008/009/012/015/019; health; no-binding fallback; LIM-001 note for the partial-gravity question; invalid output and invented citations rejected; provider error and quota mapping; JSON-schema retry; CORS, input and 404 guards. |
-| `python3 si-integration/test_si_dashboard.py` | 19/20 pass. **Fails: horizontal overflow at 390 px in "Investigation Explorer"**: the `div.list` of investigation buttons is 418 px wide. A release-candidate layout bug, reported and not patched, so the verified file stays unchanged. Fix it in the release source and rebuild. |
-| `npx wrangler@4 deploy --dry-run` in a scratch copy of `si-api/` | Bundles: 101.98 KiB, gzip 26.07 KiB. Bindings: `AI` plus 6 vars. Nothing uploaded. |
-| Secret scan of the working tree | No keys, tokens or account IDs found. |
-| Real Workers AI inference | **Not run** (no Cloudflare account in this environment). |
+| `python3 src/test_playwright.py` (original dashboard) | Pass: no page errors, no 390 px overflow, counts as in section 4. |
+| `node --test si-integration/worker_smoke.test.mjs` | 11/11: the original 9, plus r2 source identity and `wrangler.toml` origin/secrets checks. |
+| `cd si/worker && npm test` (evaluation script) | 13/13. Covers question identity with the dashboard, argument and allowance guards, health abort, runs against the real Worker code with no AI and with a mock AI, validator rejections, 429/500/network/non-JSON handling, early stop on quota, verbatim usage, and that aborted runs never overwrite a report. |
+| `node si/evidence/verify_embedded.mjs` | 26 PASS, 1 DIFF, 0 FAIL, 4 NOT VERIFIABLE. |
+| `python3 si-integration/test_si_dashboard.py` | 21/21. Includes no horizontal overflow at 360/390/768/1100/1440 px for all 4 sections and all 6 investigations, no overflow with an answer shown at 390 px, and desktop 1100 px pixel-identical to the release candidate in 9/9 views. |
+| Checksums | v1 8/8 present files OK; `si-release/` 11/11; `si/` all OK. |
+| Real Workers AI inference | **Not run.** |
 
-### 0.6 Real Cloudflare inference evaluation (to do; uses your Workers AI allocation, 10,000 neurons per day free)
-Prerequisites: a Cloudflare account, and acceptance of the Cloudflare terms and the Llama 3.3 Community License / AUP yourself (see `si-api/TERMS_REVIEW.md`).
+**The 390 px fix.** The release candidate's `si.html` overflowed in the Investigation Explorer: at 390 px (418 px wide for PSI-10, 407 px for PSI-101), at 360 px, and at 768 px. Long unbreakable file names and record or passage ids widened the single-column grid. r2 appends one CSS block that takes effect only when content would overflow and below 760 px. The original file in `si-release/` is unchanged.
 
-Start the Worker on Cloudflare's network with the real AI binding. The core.js rate limit (6/min per IP) is raised for the run, and a local dashboard origin is allowed:
-```bash
-cd si-release/si-api
-npx wrangler@4 login
-npx wrangler@4 dev --remote --port 8787 --var SI_PER_IP_PER_MIN:60 --var ALLOWED_ORIGIN:http://localhost:8000
-```
-In a second terminal:
-```bash
-curl -s http://localhost:8787/v1/health        # expect "provider":"workers_ai","model_configured":true
-curl -s -X POST http://localhost:8787/v1/ask -H 'content-type: application/json' \
-  -d '{"question":"What does FLEX tell us about fire suppression in microgravity?"}'
-curl -s -X POST http://localhost:8787/v1/ask -H 'content-type: application/json' \
-  -d '{"question":"Is there any actual lunar gravity combustion data available?"}'
-```
-In each response, check:
-- `mode` (`model` or `fallback`), and if fallback, `fallback.reason_code`;
-- `validation.attempts` and `metrics.usage`;
-- that the partial-gravity question ends as `insufficient_evidence` or as a fallback citing LIM-001.
+### 0.6 Real-model evaluation (to do)
+This uses the Workers AI allocation of the Cloudflare account that owns the Worker.
+1. Deploy the Worker (`si/worker/DEPLOY.md` section 1).
+2. Run the evaluation, either way:
+   - **GitHub Actions** (after merge): **SI real-model evaluation (manual)**.
+   - **GitHub Codespace** on this branch:
+     ```bash
+     cd si/worker && node scripts/real_eval.mjs --url https://psi-si-api.<you>.workers.dev
+     ```
 
-The full scripted evaluation (`SI_URL=http://localhost:8787 node scripts/real_eval.mjs 3`, acceptance criteria in `si-api/DEPLOY.md` section 1) needs the missing `real_eval.mjs`.
+The script:
+- asks the six competition questions (the dashboard's example questions; Q5 and Q6 must end as `insufficient_evidence`) once each: 6 requests, at most 12 model calls;
+- refuses larger runs unless `--max-requests` is raised;
+- paces requests at 11 s to respect the Worker's 6/min limit;
+- stops after 2 consecutive quota fallbacks.
 
-To view the SI dashboard against the live dev Worker:
-```bash
-python3 -m http.server 8000      # from the repo root
-```
-Then browse to `http://localhost:8000/si-release/dashboard/si.html?si_api=http://localhost:8787`.
+It records every complete response, HTTP status and retry, latency, mode, fallback reason, validator attempts and errors, and the usage the Worker returns. It writes `si/worker/test/real_eval_report.md` and `.json`. Neurons are not returned by the API and are reported as such, never estimated. The automated verdict is PASS, FAIL or INCONCLUSIVE; PASS still requires a human scientific review of every answer.
 
 ### 0.7 Remaining steps before submission (each needs explicit authorization)
-1. Supply the missing source tree (section 0.4); run `npm test` and `real_eval.mjs`; review the answers for scientific accuracy.
-2. Fix the 390 px overflow in the Investigation Explorer in the release source, then rebuild.
-3. Set `ALLOWED_ORIGIN` in `si-api/wrangler.toml` to the Pages origin, for example `https://ashwinjecku27.github.io`. The Origin header has no path. Then run `npx wrangler@4 deploy` from `si-release/si-api` and check `/v1/health`.
-4. Run `bash si-integration/configure_dashboard.sh https://psi-si-api.<you>.workers.dev`. Publish `si-integration/build/si.html` as `si.html` **next to** `index.html`, so the "Original dashboard" link resolves. The current Pages workflow stages `index.html` only, so publishing `si.html` needs a workflow change, for example adding `cp si-integration/build/si.html _site/si.html` after building it in CI, or committing a configured root `si.html`. Never overwrite `index.html` or `psi-hub.html`.
-5. Rollback: `npx wrangler@4 rollback` for the Worker; remove `si.html` from the Pages artifact for the page. The original dashboard is unaffected either way.
-6. Keep the "Built with Llama" attribution that `si.html` shows when the provider is Workers AI.
+1. Deploy the Worker with Cloudflare Workers Builds (`DEPLOY.md` section 1) and check `/v1/health`. Once the repository is connected, pushes to `main` that touch `si/worker` redeploy it.
+2. Run the real-model evaluation (0.6), review the answers for scientific accuracy, and commit the report.
+3. Build `si.html` with the Worker URL (`DEPLOY.md` section 3).
+4. Publish `si.html` next to `index.html`. This needs a separate pull request that changes the frozen `pages.yml` (one `cp` line) and records the new checksum (`DEPLOY.md` section 4).
+5. Optional, recommended: recover the original `si-evidence/` and the release's tooling (`si/evidence/README.md`, "To close the gap").
+6. Keep the "Built with Llama" attribution.
 
 ### 0.8 Scientific boundaries carried by the SI (do not regress)
-The evidence store encodes these as limitations, and the system prompt and validator enforce them:
+The evidence store encodes these as limitations, and the prompt and validator enforce them. `verify_embedded.mjs` checks that they are still present.
 - LIM-001: no partial-gravity data.
-- LIM-008: PSI-98 thickness unit disputed. Not converted or compared.
+- LIM-008: PSI-98 thickness unit disputed. Raw `0.37`, not converted or compared.
 - LIM-009 to LIM-011: SAFFIRE-II CSV/DoD disagreements left unresolved.
-- LIM-012: FLEX "CO" column undefined.
+- LIM-012: FLEX "CO" column undefined (probable CO2, unconfirmed).
 - LIM-015/016: no suppressant efficacy and no habitat validation.
 - LIM-019/022: no detector performance data.
 
-The SI never outputs risk probabilities. The original Habitat Simulator remains condition similarity only, not a validated fire-risk model. Neither dashboard predicts lunar or Martian fire risk.
+The SI never outputs risk probabilities. The original Habitat Simulator is condition similarity only, not a validated fire-risk model. Neither dashboard predicts lunar or Martian fire risk.
 
 ## 1. Architecture
 

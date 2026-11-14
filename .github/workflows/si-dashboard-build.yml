@@ -1,0 +1,24 @@
+# Manual: produce si.html with the Worker URL filled in, as a downloadable artifact. Publishes nothing.
+name: SI dashboard build (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Worker origin, e.g. https://psi-si-api.<your-subdomain>.workers.dev'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fill in the API address
+        env:
+          API_URL: ${{ inputs.api_url }}
+        run: bash si-integration/configure_dashboard.sh "$API_URL"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: si-dashboard-configured
+          path: si-integration/build/si.html
