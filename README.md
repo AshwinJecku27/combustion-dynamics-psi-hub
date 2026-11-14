@@ -4,6 +4,19 @@ An interactive, single-file dashboard built by **Team Combustion Dynamics** for 
 
 > **Scientific stance:** accuracy over impressive charts. Only values present in the source files are plotted. Every chart and finding is labelled by evidence type (measured CSV data, report-derived, plan/metadata) with provenance. The dashboard states plainly what the data cannot answer. **None of the integrated datasets is a partial-gravity (lunar 0.16 g / Mars 0.38 g) combustion dataset.**
 
+## Two dashboards in this repository
+| | Original dashboard (v1, **frozen**) | SI dashboard (corrected release r2, **not deployed**) |
+|---|---|---|
+| File | `index.html` = `psi-hub.html` (root) | `si/dashboard/si.html` (the untouched original release candidate is in `si-release/`) |
+| Data | Arrays embedded from `src/` | Evidence store v1.1, pinned by SHA-256 `a77e5548…aed548`, embedded in `si/worker/src/bundle.js` (the store files themselves were not supplied: `si/evidence/README.md`) |
+| Network | None | Calls the SI Worker API (`/v1/health`, `/v1/ask`) at a configurable address; works offline as evidence-only |
+| AI | None (rule-based ranker) | Cloudflare Workers AI, Llama 3.3 70B, behind a code validator; evidence-only fallback when the model is unavailable or rejected |
+| Status | Live via GitHub Pages | **Real Cloudflare inference not yet tested. Nothing authorized for deployment.** |
+
+The original dashboard stays the default page and the fallback. The SI dashboard links back to it ("Original dashboard" → `index.html`). See `HANDOFF.md` section 0 for the SI architecture, verification record and remaining steps, and **`si/worker/DEPLOY.md` for the browser-only deployment and evaluation steps** (GitHub + Cloudflare dashboard; nothing to install).
+
+> The SI dashboard is a retrieval-and-explanation tool over the evidence store. It does **not** predict lunar or Martian fire risk, and its answers inherit every limitation below (the evidence store carries 23 first-class limitations, LIM-001 to LIM-023).
+
 ## Challenge objectives addressed
 - Build a tool that helps researchers explore PSI combustion investigations relevant to fire safety in exploration habitats.
 - Query investigations by question, atmosphere (O2, pressure) and safety goal (prevention / detection / suppression).
@@ -35,6 +48,8 @@ Background-only entries (no dataset integrated): SAME, BASS, SoFIE, FM2, FLARE, 
 - SAME-R gives smoke-particle data only: **no detector sensitivity, response time or false-alarm data**.
 - SAFFIRE-II is n = 1 per condition: observations, not statistically conclusive.
 - No partial-gravity data anywhere. See `HANDOFF.md` for the full list.
+- The Habitat Simulator shows condition similarity only; it is **not** a validated fire-risk probability model.
+- PSI-98 thickness units (header "cm" vs SAFFIRE-II DoD "mm") and the SAFFIRE-II CSV/DoD discrepancies are **unresolved**; nothing converts or reconciles them (SI limitations LIM-008, LIM-009).
 
 ## Run locally
 The app is one self-contained file: no build step, no CDN, no network calls, no dependencies.
@@ -60,15 +75,53 @@ src/data2.js        Embedded SAFFIRE-II, FLEX, SAME-R arrays
 src/app3.js         All application logic (the three files above are concatenated into the HTML as <script> blocks)
 src/test_playwright.py  Headless regression test used during QC
 data/               Intentionally empty (see data/README.md and HANDOFF.md section 10)
-HANDOFF.md          Architecture, provenance, limitations, backend/SI plan, deployment
+HANDOFF.md          Architecture, provenance, limitations, SI integration record, deployment
+
+si/                         SI corrected release r2: the deployable copy (si/CHANGES.md lists every difference)
+  SHA256SUMS.txt            Manifest of every file in si/ (verify from inside si/)
+  dashboard/si.html         Four-section SI dashboard, 390 px overflow fixed (API address placeholder unfilled)
+  worker/                   Cloudflare Worker; Workers Builds root directory = si/worker
+    wrangler.toml           Name psi-si-api, Workers AI binding "AI", ALLOWED_ORIGIN https://ashwinjecku27.github.io, limits
+    worker.js, src/         Byte-identical to the release candidate: core.js (HTTP, CORS, rate limit, fallback),
+                            retrieve.js (deterministic retrieval), provider.js (Workers AI default), validate.js
+                            (citation + number verifier), bundle.js (GENERATED from evidence store v1.1; do not edit)
+    scripts/real_eval.mjs   Real-model evaluation (new implementation; the original was not supplied)
+    test/                   Tests for the evaluation script; real_eval_report.md/.json land here after a real run
+    DEPLOY.md               Browser-only deploy / evaluate / roll back
+    TERMS_REVIEW.md         Provider terms review from the release candidate
+  evidence/                 Cross-checks of the embedded store (verify_embedded.mjs, VERIFICATION_RESULTS.md, README.md)
+si-release/                 Original SI release candidate, byte-for-byte from si-release-candidate.zip (kept for provenance)
+si-integration/             Integration tests and helpers (not part of the release candidate)
+  worker_smoke.test.mjs     Worker tests with a MOCK AI binding (+ r2 source identity and wrangler.toml checks)
+  test_si_dashboard.py      Playwright test of si/dashboard/si.html: sections, wiring, overflow at 360-1440 px, desktop identity
+  local_worker_server.mjs   Node wrapper around the Worker for local wiring tests (no AI binding)
+  configure_dashboard.sh    Writes si-integration/build/si.html with the Worker URL filled in
+.github/workflows/
+  pages.yml                 Frozen v1 Pages deploy (index.html only)
+  si-tests.yml              Offline CI on pull requests: checksums, all tests above, evidence cross-checks
+  si-real-eval.yml          Manual: real-model evaluation against a deployed Worker (uses Workers AI allowance)
+  si-dashboard-build.yml    Manual: builds si.html with the Worker URL as a downloadable artifact
 ```
+The original evidence store v1.1 files (`si-evidence/`) and the release's own build tooling and tests (`scripts/build_bundle.py`, `scripts/build_release.sh`, `test/si.test.js`, `dev/server.js`) were **not** in the supplied ZIP; see HANDOFF.md section 0.4.
 **`psi-hub.html` is canonical.** The `src/` files are the exact script contents embedded in it (verified as substrings), provided for easier diffing and editing. If you edit `src/`, rebuild the HTML (see HANDOFF.md) and update the checksum.
 
 ## Deploy
 See "Deployment" in `HANDOFF.md` (GitHub Pages workflow included at `.github/workflows/pages.yml`; Cloudflare Pages instructions also provided).
 
+**Note:** `.github/workflows/pages.yml` is active. It runs on every push to `main` and publishes `index.html` only. It does not publish `si.html` or the Worker. Merging the SI integration therefore redeploys the unchanged original dashboard and nothing else.
+
+## SI tests and real-model evaluation
+All offline tests run automatically on pull requests (workflow **SI tests (offline)**, visible in the PR's Checks tab). To run them yourself (needs Node 22 and Python Playwright):
+```bash
+node --test si-integration/worker_smoke.test.mjs        # Worker, mock AI binding, no network
+(cd si/worker && npm test)                              # evaluation script tests
+node si/evidence/verify_embedded.mjs                    # embedded evidence cross-checks
+python3 si-integration/test_si_dashboard.py             # SI dashboard in headless Chromium
+```
+Real Cloudflare inference has **not** been run. To run it from the browser, see `si/worker/DEPLOY.md` section 2: GitHub Actions or a GitHub Codespace, against the deployed Worker.
+
 ## Data and attribution
 Data originate from NASA's Physical Sciences Informatics repository. Confirm each dataset's DOI and terms of use at the PSI site and cite them in any publication; DOIs were not embedded in this handoff.
 
-## Regression test (optional)
+## Regression test for the original dashboard (optional)
 `pip install playwright && playwright install chromium && python3 src/test_playwright.py`

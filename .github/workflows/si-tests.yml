@@ -1,0 +1,42 @@
+# Runs every offline test on pull requests and on demand. Uses no Cloudflare account, no secrets and no Workers AI
+# allowance: the Worker is exercised with a mock AI binding or none. Deploys nothing.
+name: SI tests (offline)
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Checksums (frozen v1, original release candidate, corrected release r2)
+        run: |
+          # v1: .gitignore is listed in SHA256SUMS.txt but was never committed (pre-existing; see HANDOFF.md 0.1)
+          sha256sum --ignore-missing -c SHA256SUMS.txt
+          # release candidate: its manifest lists itself with the empty-file hash, so that one line is skipped
+          (cd si-release && grep -v ' ./SHA256SUMS.txt$' SHA256SUMS.txt | sha256sum -c -)
+          (cd si && sha256sum -c SHA256SUMS.txt)
+      - name: Worker smoke tests (mock AI binding)
+        run: node --test si-integration/worker_smoke.test.mjs
+      - name: Evaluation script tests
+        working-directory: si/worker
+        run: npm test
+      - name: Embedded evidence cross-checks
+        run: node si/evidence/verify_embedded.mjs
+      - name: Install Playwright + Chromium
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Original dashboard regression test
+        run: python src/test_playwright.py
+      - name: SI dashboard test
+        run: python si-integration/test_si_dashboard.py

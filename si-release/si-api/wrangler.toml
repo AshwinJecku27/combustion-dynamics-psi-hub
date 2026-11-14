@@ -1,0 +1,14 @@
+name = "psi-si-api"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+[vars]
+SI_PROVIDER = "workers_ai"
+WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+GEMINI_MODEL = "gemini-2.5-flash"
+ALLOWED_ORIGIN = "https://REPLACE-WITH-YOUR-GITHUB-PAGES-ORIGIN"
+SI_DAILY_CAP = "300"
+SI_PER_IP_PER_MIN = "6"
+[ai]
+binding = "AI"
+# Gemini is NOT used by default: see TERMS_REVIEW.md. If ever authorised: SI_PROVIDER="gemini" + secret GEMINI_API_KEY.
+# Secret (never put here): run  npx wrangler secret put GEMINI_API_KEY

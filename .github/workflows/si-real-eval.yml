@@ -1,0 +1,77 @@
+# Manual real-model evaluation against a DEPLOYED SI Worker. Runs only when someone presses "Run workflow".
+# It consumes Workers AI allowance on the Cloudflare account that owns the Worker (default: 6 questions, at most
+# 12 model calls). It needs no secrets: the Worker URL is public and the AI binding lives inside the Worker.
+# The report is uploaded as an artifact; tick "commit_report" to also commit si/worker/test/real_eval_report.* to
+# the branch selected in "Use workflow from".
+name: SI real-model evaluation (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      worker_url:
+        description: 'Worker origin, e.g. https://psi-si-api.<your-subdomain>.workers.dev (no path, no trailing slash)'
+        required: true
+        type: string
+      questions:
+        description: 'Questions to ask: all, or a list such as 5,6'
+        required: true
+        default: all
+        type: string
+      reps:
+        description: 'Repetitions per question'
+        required: true
+        default: '1'
+        type: string
+      max_requests:
+        description: 'Allowance guard: refuse to start if questions x reps exceeds this'
+        required: true
+        default: '6'
+        type: string
+      commit_report:
+        description: 'Commit the report files to the selected branch'
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: write
+concurrency:
+  group: si-real-eval
+  cancel-in-progress: false
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run evaluation
+        id: run
+        working-directory: si/worker
+        env:
+          SI_URL: ${{ inputs.worker_url }}
+          QS: ${{ inputs.questions }}
+          REPS: ${{ inputs.reps }}
+          MAXR: ${{ inputs.max_requests }}
+        run: |
+          set +e
+          node scripts/real_eval.mjs --url "$SI_URL" --questions "$QS" --reps "$REPS" --max-requests "$MAXR"
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          for f in test/real_eval_report.md test/real_eval_report.aborted.md; do [ -f "$f" ] && cat "$f" >> "$GITHUB_STEP_SUMMARY"; done
+          exit $code
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-eval-report-${{ github.run_number }}
+          path: si/worker/test/real_eval_report*
+          if-no-files-found: warn
+      - name: Commit report
+        if: ${{ inputs.commit_report && steps.run.outputs.code == '0' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add si/worker/test/real_eval_report.md si/worker/test/real_eval_report.json
+          git commit -m "Add SI real-model evaluation report (run ${{ github.run_number }})" || echo "nothing to commit"
+          git push
