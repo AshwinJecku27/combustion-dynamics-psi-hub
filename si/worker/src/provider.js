@@ -6,7 +6,7 @@ const SCHEMA = {
   properties: {
     status: { type: 'STRING', enum: ['answered', 'partial', 'insufficient_evidence'] },
     direct_answer: { type: 'STRING' },
-    key_findings: { type: 'ARRAY', items: { type: 'OBJECT', properties: { text: { type: 'STRING' }, evidence_class: { type: 'STRING', enum: ['measured_data', 'report_derived', 'calculated', 'interpretation'] }, citations: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['text', 'evidence_class', 'citations'] } },
+    key_findings: { type: 'ARRAY', items: { type: 'OBJECT', properties: { text: { type: 'STRING' }, evidence_class: { type: 'STRING', enum: ['measured_data', 'report_derived', 'plan_or_metadata', 'calculated', 'interpretation'] }, citations: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['text', 'evidence_class', 'citations'] } },
     supporting_investigations: { type: 'ARRAY', items: { type: 'OBJECT', properties: { investigation_id: { type: 'STRING' }, role: { type: 'STRING' }, record_ids: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['investigation_id', 'role', 'record_ids'] } },
     experimental_conditions: { type: 'ARRAY', items: { type: 'OBJECT', properties: { text: { type: 'STRING' }, citations: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['text', 'citations'] } },
     limitations: { type: 'ARRAY', items: { type: 'OBJECT', properties: { text: { type: 'STRING' }, citations: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['text', 'citations'] } },

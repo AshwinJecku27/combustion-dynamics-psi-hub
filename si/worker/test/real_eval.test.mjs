@@ -44,11 +44,14 @@ function fakeFetch(routes) {
 const health = (o = {}) => ({ body: { ok: true, store_sha256: EXPECTED_STORE_SHA256, bundle_version: '1.0', model_configured: true, provider: 'workers_ai', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', ...o } });
 const base = (extra = {}) => ({ ...parseArgs(['--url', 'https://psi-si-api.example.workers.dev']), delayMs: 0, ...extra });
 
-test('the six questions are exactly the dashboard example questions (si/dashboard/si.html EX)', async () => {
-  const html = await readFile(path.join(HERE, '..', '..', 'dashboard', 'si.html'), 'utf8');
-  const m = html.match(/const EX=(\[[^\]]*\]);/); assert.ok(m, 'EX array found');
-  assert.deepEqual(QUESTIONS.map((q) => q.text), JSON.parse(m[1].replace(/'/g, '"')));
+test('the six benchmark questions stay in the internal suite and are not a public question menu', async () => {
+  assert.equal(QUESTIONS.length, 6);
+  assert.deepEqual(QUESTIONS.map((q) => q.id), ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6']);
   assert.deepEqual(QUESTIONS.filter((q) => q.expect === 'insufficient_evidence').map((q) => q.id), ['Q5', 'Q6']);
+  const html = await readFile(path.join(HERE, '..', '..', 'dashboard', 'si.html'), 'utf8');
+  assert.match(html, /h\('textarea',\{id:'si-q'/, 'free-text question box present');
+  for (const q of QUESTIONS) assert.ok(!html.includes(q.text), `benchmark ${q.id} must not be hard-coded in the public dashboard`);
+  assert.doesNotMatch(html, /Example questions/);
 });
 
 test('argument parsing and allowance guard', () => {

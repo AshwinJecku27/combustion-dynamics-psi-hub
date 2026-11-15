@@ -11,7 +11,17 @@ Written so another coding agent can continue this project without the original C
 ## 0. SI (Scientific Intelligence): integration record
 
 Sections 1 to 11 below describe the **frozen original dashboard** and are unchanged. This section describes the SI
-release added alongside it. Last updated 2026-11-14 (corrected release r2).
+release added alongside it. Last updated 2026-11-15 (corrected release r3).
+
+### 0.0 r3: first live evaluation and fixes (read first)
+The first live Workers AI evaluation against the deployed `psi-si-api` Worker gave 4/6 validated model answers, with no HTTP, network or rate-limit errors:
+- Q3 passed.
+- Q5 and Q6 correctly returned `insufficient_evidence`.
+- Q1 passed, but said only that lunar-gravity data is absent.
+- Q2 (SAFFIRE-II) and Q4 (FLEX) fell back to evidence-only on validator errors.
+
+Root cause of Q2 and Q4: the store has no report passages for SAFFIRE-II, SAFFIRE-I or FLEX, only test-plan and DoD passages, and the prompt had no honest evidence class for them. r3 adds the evidence class `plan_or_metadata`, tightens the validator (citations must belong to the investigation a finding names; lunar or habitat questions must cite LIM-001; "which investigations" answers must name some), narrows retrieval for explicitly named investigations, and makes Ask SI open-ended. The six questions stay as **internal** regression benchmarks (`si/worker/scripts/real_eval.mjs`, `si/worker/test/benchmark_regression.test.mjs`); they are no longer a menu in the dashboard. Full detail: `si/CHANGES.md`. `bundle.js` (evidence store) is unchanged. **Real-model behaviour after r3 has not been re-evaluated.** Merging to `main` redeploys the Worker if Workers Builds is connected.
+
 
 ### 0.1 Status
 - **Integrated, not deployed.** No Worker has been deployed, no `si.html` has been published and no Cloudflare resource exists. Each deployment step needs explicit authorization (`si/worker/DEPLOY.md`).
@@ -26,7 +36,7 @@ release added alongside it. Last updated 2026-11-14 (corrected release r2).
 | Path | What | Status |
 |---|---|---|
 | `si-release/` | `si-release-candidate.zip` → `release/`, byte-for-byte. ZIP SHA-256 `63c74b45d1e0c7d6fd1508017d99c3ed15aa0c113d4698b424b57722b6ea9dd6`, 16 entries. | **Frozen.** Its 11 content files verify against its own `SHA256SUMS.txt`. The manifest's line for itself carries the empty-file hash `e3b0c442…` (it was hashed while still empty), so only that line fails. Only `si-api/.gitignore` was added. |
-| `si/` | **Corrected release r2**: the copy to deploy and evaluate. | Manifest `si/SHA256SUMS.txt`; every difference from `si-release/` is listed in `si/CHANGES.md`. |
+| `si/` | **Corrected release r3** (r2 plus the benchmark fixes in 0.0): the copy to deploy and evaluate. | Manifest `si/SHA256SUMS.txt`; every difference from `si-release/` is listed in `si/CHANGES.md`. |
 | `si-integration/` | Integration tests and helpers. | Not part of either release. |
 
 r2 in short:
@@ -86,10 +96,10 @@ GitHub Actions "SI real-model evaluation" --(no Origin header)--> same API; writ
 | Suite | Result |
 |---|---|
 | `python3 src/test_playwright.py` (original dashboard) | Pass: no page errors, no 390 px overflow, counts as in section 4. |
-| `node --test si-integration/worker_smoke.test.mjs` | 11/11: the original 9, plus r2 source identity and `wrangler.toml` origin/secrets checks. |
-| `cd si/worker && npm test` (evaluation script) | 13/13. Covers question identity with the dashboard, argument and allowance guards, health abort, runs against the real Worker code with no AI and with a mock AI, validator rejections, 429/500/network/non-JSON handling, early stop on quota, verbatim usage, and that aborted runs never overwrite a report. |
+| `node --test si-integration/worker_smoke.test.mjs` | 11/11: the original 9, plus evidence-store identity (r3: `bundle.js`, `worker.js` byte-identical) and `wrangler.toml` origin/secrets checks. |
+| `cd si/worker && npm test` | 38/38 (r3): 13 evaluation-script tests (benchmarks stay internal and are not in the dashboard, argument and allowance guards, health abort, mock-AI runs, 429/500/network handling, reports) plus 25 benchmark regression tests (`test/benchmark_regression.test.mjs`). |
 | `node si/evidence/verify_embedded.mjs` | 26 PASS, 1 DIFF, 0 FAIL, 4 NOT VERIFIABLE. |
-| `python3 si-integration/test_si_dashboard.py` | 21/21. Includes no horizontal overflow at 360/390/768/1100/1440 px for all 4 sections and all 6 investigations, no overflow with an answer shown at 390 px, and desktop 1100 px pixel-identical to the release candidate in 9/9 views. |
+| `python3 si-integration/test_si_dashboard.py` | 27/27 (r3). Covers: no horizontal overflow at 360/390/768/1100/1440 px; Ask SI has a free-text box and no benchmark menu; a user-written question reaches the Worker; Overview and Comparisons pixel-identical to the release candidate at 1100 px; Explorer text-identical apart from passage-kind labels. |
 | Checksums | v1 8/8 present files OK; `si-release/` 11/11; `si/` all OK. |
 | Real Workers AI inference | **Not run.** |
 
@@ -106,7 +116,7 @@ This uses the Workers AI allocation of the Cloudflare account that owns the Work
      ```
 
 The script:
-- asks the six competition questions (the dashboard's example questions; Q5 and Q6 must end as `insufficient_evidence`) once each: 6 requests, at most 12 model calls;
+- asks the six internal benchmark questions (not shown in the public dashboard; Q5 and Q6 must end as `insufficient_evidence`) once each: 6 requests, at most 12 model calls;
 - refuses larger runs unless `--max-requests` is raised;
 - paces requests at 11 s to respect the Worker's 6/min limit;
 - stops after 2 consecutive quota fallbacks.
