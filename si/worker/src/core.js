@@ -44,12 +44,32 @@ const CITE_LABEL = (id, pack) => id;
 export function fallbackAnswer(pack, reason) {
   const lims = pack.limitations.slice(0, 5).map((l) => ({ id: l.id, title: l.title }));
   const parts = [];
-  if (pack.question_class.mustBeInsufficient) parts.push('This question cannot be answered from the evidence store as a positive result (see limitation LIM-001: no partial-gravity combustion data).');
+  if (pack.question_class.mustBeInsufficient) parts.push(classNote(pack.question_class));
   return { mode: 'fallback', generated_by: 'No AI model was used for this response. It lists retrieved evidence only.', reason_code: reason, note: parts.join(' ') || undefined,
     retrieved: { investigations: pack.investigations.map((i) => ({ id: i.id, name: i.name, n_records: i.stats.n_records, partial_gravity_data_present: i.partial_gravity_data_present })), passages: pack.passages.map((p) => ({ id: p.id, quote: p.quote, locator: p.locator })), limitations: lims, calculations: pack.calculations.map((c) => ({ id: c.id, label: c.label, value: c.value, record_ids_total: c.record_ids_total })) } };
 }
 
 function evidenceSheet(pack) { return { passages: pack.passages.map((p) => ({ id: p.id, kind: p.kind, file: p.file, page: p.locator && (p.locator.page || Object.values(p.locator).join(' ')), quote: p.quote })), limitations: pack.limitations.map((l) => ({ id: l.id, title: l.title })), calculations: pack.calculations.map((c) => ({ id: c.id, label: c.label, value: c.value, method: c.method, record_ids_total: c.record_ids_total })) }; }
+
+// Question classes that may only be answered as insufficient_evidence or partial (retrieve.js classify). Their prompt gets
+// an explicit instruction; Q1-Q4 and every other question keep the unchanged SYSTEM prompt. The statements are scoped to
+// the integrated evidence store (calc:partial_gravity is an empty list; LIM-001) and claim nothing about research elsewhere.
+const STORE_ABSENCE = 'The current integrated PSI evidence store contains no actual partial-gravity (lunar or Martian) combustion data: calc:partial_gravity is an empty list (LIM-001); its investigations are microgravity or low-gravity experiments.';
+export function classNote(cls) {
+  if (cls.asksValidatedRisk) return 'No. ' + STORE_ABSENCE + ' The system also computes no fire-risk probabilities, so it cannot establish a validated lunar-habitat fire-risk probability. This says nothing about research outside this evidence store.';
+  if (cls.asksPartialGravityData) return 'No. ' + STORE_ABSENCE + ' This says nothing about research outside this evidence store.';
+  return 'This cannot be established from the evidence store. ' + STORE_ABSENCE;
+}
+export function classInstruction(cls) {
+  if (!cls || !cls.mustBeInsufficient) return '';
+  const kind = cls.asksValidatedRisk ? 'asks for a validated fire-risk probability' : cls.asksPartialGravityData ? 'asks whether actual partial-gravity combustion data exist' : 'asks whether something is safe, guaranteed or certified';
+  return `\nQUESTION CLASS (set by code: this question ${kind}). The pack's question_class.mustBeInsufficient is true.
+- status MUST be "insufficient_evidence" ("partial" only if another part of the question is answerable from the pack). Never "answered", even when the answer is a plain "No".
+- The first sentence of direct_answer must answer the question explicitly and be scoped to this evidence store, for example: "${classNote(cls).replace(/"/g, "'")}"
+- Speak only about the current integrated PSI evidence store; never say that no partial-gravity research exists anywhere.
+- Never present microgravity, low-gravity or normal-gravity results as lunar- or partial-gravity measurements. Never give a probability, percentage or risk number.
+- Include a limitation citing LIM-001, and put the missing evidence in insufficient_evidence_reason.`;
+}
 
 export async function handleAsk(question, env, opts = {}) {
   const fetchImpl = opts.fetchImpl || fetch;
@@ -69,7 +89,7 @@ export async function handleAsk(question, env, opts = {}) {
     const remaining = deadline - (Date.now() - t0);
     if (attempts > 0 && remaining < perCall) { retrySkipped = 'deadline'; break; }
     let out;
-    try { out = await provider.generate({ timeoutMs: Math.min(perCall, remaining), system: SYSTEM + (lastErrors ? '\nYour previous answer was rejected by the verifier for: ' + lastErrors.join('; ') + '. Fix these and answer again.' + repairHints(lastErrors).map((x) => '\n- ' + x).join('') + groundingGuide(lastErrors, pack) : ''), user }); }
+    try { out = await provider.generate({ timeoutMs: Math.min(perCall, remaining), statusEnum: cls.mustBeInsufficient ? ['insufficient_evidence', 'partial'] : undefined, system: SYSTEM + classInstruction(cls) + (lastErrors ? '\nYour previous answer was rejected by the verifier for: ' + lastErrors.join('; ') + '. Fix these and answer again.' + repairHints(lastErrors).map((x) => '\n- ' + x).join('') + groundingGuide(lastErrors, pack) : ''), user }); }
     catch (e) { const code = e instanceof ProviderError ? e.code : 'internal_error'; return { ...base, mode: 'fallback', fallback: fallbackAnswer(pack, code), message: `The AI model could not be used (${code}), so only retrieved evidence is shown. This is not an AI answer.` }; }
     usage = out.usage || usage;
     let parsed; try { parsed = JSON.parse(out.text); } catch { lastErrors = ['response was not valid JSON']; rejected.push(diag(attempts, lastErrors)); continue; }

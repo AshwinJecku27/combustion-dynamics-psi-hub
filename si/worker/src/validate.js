@@ -1,6 +1,6 @@
 // Code verifier: the model is never the authority. Anything not supported by the EvidencePack is rejected.
 import { namedInvestigations, ownerOf, ACCEPTED_SOURCE_OWNERS, REPORT_KINDS, PLAN_OR_METADATA_KINDS } from './investigations.js';
-import { evidenceTexts, ungroundedTerms, stripFormulas, gravityWordingErrors } from './grounding.js';
+import { evidenceTexts, ungroundedTerms, stripFormulas, gravityWordingErrors, statesGravityAbsence } from './grounding.js';
 // plan_or_metadata: a statement from a test plan or a data-description document (DoD). These are not NASA report
 // findings, and a plan states intent, not results; they get their own class instead of being passed off as report_derived.
 const STATUS = ['answered', 'partial', 'insufficient_evidence'];
@@ -81,6 +81,13 @@ export function validate(ans, ctx) {
   const all = texts.join(' \n ');
   BANNED.forEach((re) => { if (re.test(all)) errs.push('banned claim wording: ' + re); });
   errs.push(...gravityWordingErrors(texts));
+  // Questions about partial-gravity data or a validated risk must be answered explicitly: the direct answer (or the
+  // insufficient-evidence reason) has to state, in an accepted absence form, that the store has no such data.
+  if ((cls.asksPartialGravityData || cls.asksValidatedRisk) && !statesGravityAbsence([ans.direct_answer, ans.insufficient_evidence_reason || '']))
+    errs.push('question asks about partial-gravity data or a validated fire-risk probability: direct_answer must state explicitly that the evidence store contains no partial-gravity (lunar or Martian) combustion data');
+  // A validated-risk question must never receive a probability, percentage or risk figure.
+  if (cls.asksValidatedRisk && /\b(?:probability|likelihood|chance|risk|odds)\b[^.;]{0,40}?(?:\d+(?:\.\d+)?\s*%|\b0?\.\d+\b|\b1\s+in\s+\d+)|\d+(?:\.\d+)?\s*%[^.;]{0,30}\b(?:probability|likelihood|chance|risk)\b/i.test(all))
+    errs.push('validated-risk question: the answer gives a risk number, but the system computes no risk probabilities');
   const set = packNumberSet(pack), qn = new Set(numbers(question));
   const bad = [...new Set(numbers(all))].filter((n) => !numberSupported(n, set, qn));
   if (bad.length) errs.push('numbers not found in evidence pack: ' + bad.slice(0, 6).join(', '));
@@ -95,6 +102,9 @@ export function repairHints(errors) {
   if (/plan_or_metadata finding must cite/.test(e)) h.push('plan_or_metadata must cite a passage whose id contains ":plan:" or ":dod:".');
   if (/evidence belongs to/.test(e)) h.push('Each finding must be supported by evidence from the investigation it names. Cite that investigation\'s own records or passages, or remove the finding.');
   if (/banned claim wording/.test(e)) h.push('The verifier rejects the words prove/proven/guarantee and "validate(s) [the] habitat / fire safety / suppression" and "demonstrate(s) suppression/efficacy" in ANY sentence, including negative ones. Rephrase, for example: "does not establish suppressant efficacy", "is condition similarity only, not habitat-level evidence".');
+  if (/this question class must be reported as insufficient_evidence or partial/.test(e)) h.push('This question class (see question_class.mustBeInsufficient) must use status "insufficient_evidence" (or "partial"), never "answered", even when the answer is a plain "No". Keep the explicit answer in direct_answer.');
+  if (/must state explicitly that the evidence store contains no/.test(e)) h.push('Begin direct_answer with an explicit, store-scoped absence statement, e.g. "No. The current integrated PSI evidence store contains no actual partial-gravity combustion data (calc:partial_gravity is an empty list; LIM-001)."');
+  if (/risk number/.test(e)) h.push('Remove every probability, percentage or risk figure: the system computes no risk probabilities.');
   if (/must cite LIM-001/.test(e)) h.push('Add a limitation citing LIM-001: no partial-gravity combustion data; microgravity results do not establish lunar or Martian behaviour.');
   if (/name at least one investigation/.test(e)) h.push('List the relevant investigations from the pack in supporting_investigations and say what each actually tested, citing its records or passages.');
   if (/but none of its cited evidence/.test(e)) h.push('Every substance or material a finding names (for example SF6, He, CO2, PMMA, Nomex, silicone, SIBAL, Kapton) must appear in one of the passages, records or limitations it cites. Cite the item that actually names it, or remove it from the finding. A test plan naming an agent is a plan, not a test.');
