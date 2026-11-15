@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { buildPack } from '../src/retrieve.js';
 import { validate } from '../src/validate.js';
 import { evidenceSupport, LEVELS } from '../src/support.js';
-import { handleAsk, SYSTEM } from '../src/core.js';
+import { handleAsk } from '../src/core.js';
 import { MOCK_ANSWER } from '../../../si-integration/local_worker_server.mjs';
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -90,10 +90,4 @@ test('the UI test mock answer is a genuinely valid answer through the real pipel
   const q = 'How did flow direction relate to burn time in the SAFFIRE samples?';
   const r = await handleAsk(q, { SI_PROVIDER: 'workers_ai', AI: { run: async () => ({ response: MOCK_ANSWER }) } });
   assert.equal(r.mode, 'model'); assert.equal(r.validation.attempts, 1); assert.equal(r.evidence_support.level, 'moderate');
-});
-
-test('prompt asks for grounded qualitative explanation, and forbids unstated mechanisms', () => {
-  assert.match(SYSTEM, /Explain, do not only list/);
-  assert.match(SYSTEM, /Never add a mechanism, trend, relationship or number the pack does not state/);
-  assert.match(SYSTEM, /interpretation: your own cautious reading of cited evidence; cite the items it interprets/);
 });

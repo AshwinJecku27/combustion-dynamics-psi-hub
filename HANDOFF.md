@@ -13,7 +13,14 @@ Written so another coding agent can continue this project without the original C
 Sections 1 to 11 below describe the **frozen original dashboard** and are unchanged. This section describes the SI
 release added alongside it. Last updated 2026-11-15 (corrected release r3).
 
-### 0.00000 r7: final product (read first)
+### 0.000000 r8: Ask SI timeouts (read first)
+Evaluation #6, on the deployed r7 Worker, gave 3 of 6 AI answers: 1 timeout at the Worker's own 25 s wait limit, 2 double validator rejections, and latency about double that of #5.
+- **Fix:** r8 reverts r7's explanation rule, restoring the evaluation-#5 prompt byte-for-byte.
+- **Diagnostics:** timeout and error diagnostics added.
+
+Re-run the evaluation after deploying. Details: `si/CHANGES.md` (r8).
+
+### 0.00000 r7: final product
 `si/dashboard/si.html` is now the final SI product: Overview, Ask SI, Investigations, Insights & Gaps.
 - **New:** a structured, source-linked answer view and the **Evidence Support** indicator (`si/worker/src/support.js`).
 - **New:** a maintainer staging tool (`si/ingest/`).
