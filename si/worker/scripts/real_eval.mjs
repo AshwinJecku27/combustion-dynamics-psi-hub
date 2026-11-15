@@ -135,6 +135,7 @@ export function classify(q, exchange) {
     r.outcome = 'real_model_answer';
     r.model = body.model || null;
     r.answer_status = body.answer && body.answer.status;
+    r.evidence_support = body.evidence_support ? body.evidence_support.level : 'not returned';
     const ra = body.validation && Array.isArray(body.validation.rejected_attempts) ? body.validation.rejected_attempts : null;
     r.validator = { passed: true, attempts: body.validation && body.validation.attempts, rejected_attempts: Math.max(0, ((body.validation && body.validation.attempts) || 1) - 1), errors_of_rejected_attempts: ra || 'not returned by the Worker' };
   } else if (body.mode === 'fallback') {
@@ -301,8 +302,8 @@ export function renderMarkdown(rep) {
     `| Latency (last attempt, ms) p50 / p90 / max | ${s.latency_ms.p50 ?? 'n/a'} / ${s.latency_ms.p90 ?? 'n/a'} / ${s.latency_ms.max ?? 'n/a'} |`,
     `| Tokens prompt / completion / total | ${s.usage.prompt_tokens ?? 'not reported'} / ${s.usage.completion_tokens ?? 'not reported'} / ${s.usage.total_tokens ?? 'not reported'} (from ${s.usage.responses_with_usage} responses) |`,
     `| Neurons | ${s.usage.neurons ?? 'not reported by the API'} |`, '', `_${s.usage.note}_`, '');
-  L.push('## Per request', '', '| Q | Rep | Evaluation | Outcome | HTTP | Model status | Validator attempts | Latency ms | Tokens (total) | Expectation |', '|---|---|---|---|---|---|---|---|---|---|');
-  for (const r of rep.results) L.push(`| ${r.question_id} | ${r.rep} | ${(r.evaluation || '').replace('_', ' ')} | ${r.outcome === 'real_model_answer' ? '**REAL MODEL ANSWER**' : r.outcome === 'fallback' ? 'FALLBACK (' + esc(r.fallback_reason) + ')' : esc(r.outcome.toUpperCase())} | ${r.http_attempts.map((a) => a.http_status || 'ERR').join(',')} | ${esc(r.answer_status || '')} | ${r.validator ? r.validator.attempts : ''} | ${r.latency_ms_total} | ${r.usage && typeof r.usage.total_tokens === 'number' ? r.usage.total_tokens : 'not reported'} | ${esc(r.expectation_met)} |`);
+  L.push('## Per request', '', '| Q | Rep | Evaluation | Outcome | HTTP | Model status | Evidence support | Validator attempts | Latency ms | Tokens (total) | Expectation |', '|---|---|---|---|---|---|---|---|---|---|---|');
+  for (const r of rep.results) L.push(`| ${r.question_id} | ${r.rep} | ${(r.evaluation || '').replace('_', ' ')} | ${r.outcome === 'real_model_answer' ? '**REAL MODEL ANSWER**' : r.outcome === 'fallback' ? 'FALLBACK (' + esc(r.fallback_reason) + ')' : esc(r.outcome.toUpperCase())} | ${r.http_attempts.map((a) => a.http_status || 'ERR').join(',')} | ${esc(r.answer_status || '')} | ${esc(r.evidence_support || '')} | ${r.validator ? r.validator.attempts : ''} | ${r.latency_ms_total} | ${r.usage && typeof r.usage.total_tokens === 'number' ? r.usage.total_tokens : 'not reported'} | ${esc(r.expectation_met)} |`);
   L.push('', '## Complete responses', '');
   for (const r of rep.results) {
     L.push(`### ${r.question_id} (rep ${r.rep}): ${r.outcome === 'real_model_answer' ? 'REAL MODEL ANSWER' : r.outcome === 'fallback' ? 'FALLBACK, no AI text' : r.outcome.toUpperCase()}`, '', `**Question:** ${r.question}`, '');

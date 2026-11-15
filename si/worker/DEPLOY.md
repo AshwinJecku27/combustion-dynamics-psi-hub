@@ -77,6 +77,7 @@ when deployment is authorised.
 
 ### Reading the report
 - **REAL MODEL ANSWER** rows are validated Workers AI output.
+- The **Evidence support** column gives each validated answer's Evidence Support level (`si/worker/src/support.js`). It describes support by the retrieved evidence, not scientific correctness.
 - **FALLBACK** rows showed retrieved evidence only. Their reason codes:
   - `no_key`: the model is not configured;
   - `rate_limited`: daily allocation used up;

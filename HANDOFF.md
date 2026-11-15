@@ -13,7 +13,15 @@ Written so another coding agent can continue this project without the original C
 Sections 1 to 11 below describe the **frozen original dashboard** and are unchanged. This section describes the SI
 release added alongside it. Last updated 2026-11-15 (corrected release r3).
 
-### 0.0000 r6: run #4 follow-up (read first)
+### 0.00000 r7: final product (read first)
+`si/dashboard/si.html` is now the final SI product: Overview, Ask SI, Investigations, Insights & Gaps.
+- **New:** a structured, source-linked answer view and the **Evidence Support** indicator (`si/worker/src/support.js`).
+- **New:** a maintainer staging tool (`si/ingest/`).
+- **Prompt:** a grounded qualitative-explanation rule.
+
+Real-model evaluation #5 passed all six benchmarks on `186d0ac`; **the r7 prompt addition has not been evaluated live**, so re-run the evaluation after merge. The root `/` still publishes the frozen v1 dashboard; making `/si/` the entry point would be a separate, explicit Pages change. Details: `si/CHANGES.md` (r7), `README.md`.
+
+### 0.0000 r6: run #4 follow-up
 Run #4 (on `379b943`): Q1–Q4 PASS; Q5 and Q6 FAIL.
 - **Q5:** the prompt never told the model that this question class must use `insufficient_evidence`. Fixed by a class-specific instruction, a narrowed status enum in the JSON schema, and a retry hint.
 - **Q6:** correct absence phrasings were missing from the gravity check. Fixed by adding those forms.
@@ -124,9 +132,9 @@ GitHub Actions "SI real-model evaluation" --(no Origin header)--> same API; writ
 |---|---|
 | `python3 src/test_playwright.py` (original dashboard) | Pass: no page errors, no 390 px overflow, counts as in section 4. |
 | `node --test si-integration/worker_smoke.test.mjs` | 11/11: the original 9, plus evidence-store identity (r3: `bundle.js`, `worker.js` byte-identical) and `wrangler.toml` origin/secrets checks. |
-| `cd si/worker && npm test` | 83/83 (r6: plus 13 in `test/q5_q6_eval4.test.mjs`; r5: plus 13 in `test/q1_q5_followup.test.mjs`; r4: 38 plus 19 in `test/post_r3_fixes.test.mjs`); r3: 13 evaluation-script tests (benchmarks stay internal and are not in the dashboard, argument and allowance guards, health abort, mock-AI runs, 429/500/network handling, reports) plus 25 benchmark regression tests (`test/benchmark_regression.test.mjs`). |
+| `cd si/worker && npm test` | 94/94 (r7: plus 11 in `test/support.test.mjs`; r6: plus 13 in `test/q5_q6_eval4.test.mjs`; r5: plus 13 in `test/q1_q5_followup.test.mjs`; r4: 38 plus 19 in `test/post_r3_fixes.test.mjs`); r3: 13 evaluation-script tests (benchmarks stay internal and are not in the dashboard, argument and allowance guards, health abort, mock-AI runs, 429/500/network handling, reports) plus 25 benchmark regression tests (`test/benchmark_regression.test.mjs`). |
 | `node si/evidence/verify_embedded.mjs` | 26 PASS, 1 DIFF, 0 FAIL, 4 NOT VERIFIABLE. |
-| `python3 si-integration/test_si_dashboard.py` | 27/27 (r3). Covers: no horizontal overflow at 360/390/768/1100/1440 px; Ask SI has a free-text box and no benchmark menu; a user-written question reaches the Worker; Overview and Comparisons pixel-identical to the release candidate at 1100 px; Explorer text-identical apart from passage-kind labels. |
+| `python3 si-integration/test_si_dashboard.py` | 51/51 (r7, rewritten for the final UI; earlier: 27/27 in r3). Covers: no horizontal overflow at 360/390/768/1100/1440 px; Ask SI has a free-text box and no benchmark menu; a user-written question reaches the Worker; Overview and Comparisons pixel-identical to the release candidate at 1100 px; Explorer text-identical apart from passage-kind labels. |
 | Checksums | v1 8/8 present files OK; `si-release/` 11/11; `si/` all OK. |
 | Real Workers AI inference | **Not run.** |
 
