@@ -1,4 +1,21 @@
-# SI release r8 (`si/`) versus the original release candidate (`si-release/`)
+# SI release r9 (`si/`) versus the original release candidate (`si-release/`)
+
+## r9 (2026-11-15): Gemini as the live provider
+The Workers AI daily allocation is exhausted. The team configured the Worker secret `GEMINI_API_KEY` and authorised Gemini.
+- **Provider switch:** `wrangler.toml` sets `SI_PROVIDER = "gemini"` and `GEMINI_MODEL = "gemini-2.5-flash"`. Workers AI is not called.
+- **Latency and quota:** for Gemini 2.5 Flash models, `provider.js` sends `thinkingConfig.thinkingBudget = 0` (no thinking tokens).
+- **HTTP diagnostics:** status code and timing only; never the URL, key or response body.
+- **Unchanged:** retrieval, prompt, schema, validators, citations, Evidence Support and the evidence-only fallback.
+- **Dashboard:** the overview no longer names Llama as the model; the answer badge shows the model the Worker reports.
+- **Tests:** new `worker/test/gemini_provider.test.mjs` (9, mocked fetch); the smoke test expects the Gemini configuration.
+- **Free tier only:** the key's Google project must have no billing enabled. Free-tier quotas are small (third-party reports from Sept–Oct 2026 suggest about 20 requests/day for 2.5 Flash). Each question uses 1 call, or 2 if the first answer is rejected. Google may use free-tier prompts and responses to improve its products (see `worker/TERMS_REVIEW.md`).
+- **Revert:** set `SI_PROVIDER = "workers_ai"`.
+
+`worker/package.json`: `1.0.0-rc.9`.
+
+---
+
+# r8 (2026-11-15)
 
 ## r8 (2026-11-15): public Ask SI timeouts after r7
 Real-model evaluation #6 ran on the deployed r7 Worker (`32e9b11`). Compared with #5 on `186d0ac`:

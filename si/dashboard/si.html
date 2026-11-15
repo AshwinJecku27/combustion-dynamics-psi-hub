@@ -153,7 +153,7 @@ function vOverview(){const pg=CALC['calc:partial_gravity'];
    h('p',{class:'small',style:'margin:16px 0 0'},h('b',null,'Space habitats. '),'None of the integrated investigations contains partial-gravity (lunar or Martian) combustion data ',cite('calc:partial_gravity'),' ',cite('LIM-001'),'. SI shows which experiments are relevant to habitat fire safety and exactly where the evidence stops — see ',h('a',{href:'#',onclick:e=>{e.preventDefault();show('insights')}},'Insights & Gaps'),'.')),
   h('div',{class:'panel'},h('h3',null,'How SI answers'),h('div',{class:'steps',style:'margin-top:12px'},
    h('div',null,h('b',null,'Retrieve'),'Code selects the relevant investigations, records, passages and limitations from the evidence store.'),
-   h('div',null,h('b',null,'Explain'),'A language model (Llama 3.3 70B on Cloudflare Workers AI) writes a structured answer using only that evidence.'),
+   h('div',null,h('b',null,'Explain'),'A hosted language model writes a structured answer using only that evidence.'),
    h('div',null,h('b',null,'Verify'),'Code rejects answers with citations outside the evidence, unsupported numbers, ungrounded materials or overstated claims.'),
    h('div',null,h('b',null,'Show'),'You see the answer, every source behind it, its evidence support and its limitations — or the evidence alone if no answer passes.'))))}
 
