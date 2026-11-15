@@ -93,10 +93,25 @@ The automated verdict is computed from the actual responses:
 2. Download the artifact `si-dashboard-configured`. It contains `si.html` with the address filled in. `si/dashboard/si.html` stays unconfigured on purpose.
 
 ## 4. Publish the dashboard (needs a separate, authorised change)
-`.github/workflows/pages.yml` publishes `index.html` only. It is part of the frozen v1 checksums, so this branch does not change it. To publish the SI dashboard at `https://ashwinjecku27.github.io/combustion-dynamics-psi-hub/si.html`, a later pull request has to:
-1. Commit the configured file as `si.html` in the repository root, next to `index.html`, so its "Original dashboard" link works.
-2. Add one line to the "Stage site" step of `pages.yml`: `cp si.html _site/si.html`.
-3. Regenerate `SHA256SUMS.txt` for `pages.yml` and record why in HANDOFF.md.
+`.github/workflows/pages.yml` runs `si-integration/build_pages_site.sh`, which publishes:
+- `/` = `index.html`, byte-identical. The script checks it against `SHA256SUMS.txt`.
+- `/si/` = `si/dashboard/si.html` as `si/index.html`. Its "Original dashboard" link is rewritten to `../index.html`.
+
+URL: `https://ashwinjecku27.github.io/combustion-dynamics-psi-hub/si/`.
+
+**API address.** The build reads the repository variable `SI_API_BASE` (**Settings → Secrets and variables → Actions → Variables**). It must be an https origin with no path. For this project's Worker, set:
+
+| Name | Value |
+|---|---|
+| `SI_API_BASE` | `https://psi-si-api.ashwin-jecku.workers.dev` |
+
+**Ask SI does not work publicly until this variable is set and the Pages workflow has run again.** The address is deliberately not in the source, the workflow or the secrets: it is a public endpoint, set at build time only.
+- **Not set:** `/si/` is published unconfigured. Ask SI sends nothing and says the service is not configured; the other three sections work from embedded data.
+- **To turn Ask SI on:** add the variable, then re-run **Deploy static site to GitHub Pages** (**Actions** → **Run workflow**). Every visitor's question then uses the Worker's Workers AI allowance.
+
+The Worker's `ALLOWED_ORIGIN` (`https://ashwinjecku27.github.io`) already covers `/si/`, because an origin carries no path.
+
+Offline checks: `node --test si-integration/pages_site.test.mjs` and `python3 si-integration/test_pages_site.py`.
 
 Never overwrite `index.html` or `psi-hub.html`.
 

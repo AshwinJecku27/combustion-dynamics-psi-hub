@@ -97,7 +97,7 @@ si-integration/             Integration tests and helpers (not part of the relea
   local_worker_server.mjs   Node wrapper around the Worker for local wiring tests (no AI binding)
   configure_dashboard.sh    Writes si-integration/build/si.html with the Worker URL filled in
 .github/workflows/
-  pages.yml                 Frozen v1 Pages deploy (index.html only)
+  pages.yml                 Pages deploy: index.html unchanged at /, SI dashboard at /si/ (via si-integration/build_pages_site.sh)
   si-tests.yml              Offline CI on pull requests: checksums, all tests above, evidence cross-checks
   si-real-eval.yml          Manual: real-model evaluation against a deployed Worker (uses Workers AI allowance)
   si-dashboard-build.yml    Manual: builds si.html with the Worker URL as a downloadable artifact
@@ -108,7 +108,7 @@ The original evidence store v1.1 files (`si-evidence/`) and the release's own bu
 ## Deploy
 See "Deployment" in `HANDOFF.md` (GitHub Pages workflow included at `.github/workflows/pages.yml`; Cloudflare Pages instructions also provided).
 
-**Note:** `.github/workflows/pages.yml` is active. It runs on every push to `main` and publishes `index.html` only. It does not publish `si.html` or the Worker. Merging the SI integration therefore redeploys the unchanged original dashboard and nothing else.
+**Note:** `.github/workflows/pages.yml` is active. It runs on every push to `main` and publishes `index.html`, unchanged, at `/` and the SI dashboard at `/si/`. The Ask SI section stays unconfigured unless the repository variable `SI_API_BASE` is set (`si/worker/DEPLOY.md` section 4). The workflow never deploys the Worker.
 
 ## SI tests and real-model evaluation
 All offline tests run automatically on pull requests (workflow **SI tests (offline)**, visible in the PR's Checks tab). To run them yourself (needs Node 22 and Python Playwright):

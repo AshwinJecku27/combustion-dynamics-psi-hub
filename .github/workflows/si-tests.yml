@@ -27,6 +27,8 @@ jobs:
           (cd si && sha256sum -c SHA256SUMS.txt)
       - name: Worker smoke tests (mock AI binding)
         run: node --test si-integration/worker_smoke.test.mjs
+      - name: Pages artifact (root unchanged, SI at /si/)
+        run: node --test si-integration/pages_site.test.mjs
       - name: Evaluation script tests
         working-directory: si/worker
         run: npm test
@@ -40,3 +42,5 @@ jobs:
         run: python src/test_playwright.py
       - name: SI dashboard test
         run: python si-integration/test_si_dashboard.py
+      - name: Pages artifact in a browser (/ and /si/)
+        run: python si-integration/test_pages_site.py

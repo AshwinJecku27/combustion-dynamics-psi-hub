@@ -4,7 +4,7 @@
 dfb501a79eca60e53653b0ccaf8a90f320eec283d7b4ff2d932609f09e64e8e2  ./evidence/VERIFICATION_RESULTS.md
 7e187750c3eec2d1a020b587fdf062e89dacfdcd333df52b8a14494c00569ef5  ./evidence/verify_embedded.mjs
 e07bdffe1f8ed879d7fef384eb16ccbf93d33c6405219199dba5df585d6950e1  ./worker/.gitignore
-74d8315b5a393a34725fe822f176f61ad1dd43e30fc3f3b173e6b1aade565782  ./worker/DEPLOY.md
+3944b9cecb123ef2e19e2c9348d96134cdeef36105154104ed89d926fb0cb0c8  ./worker/DEPLOY.md
 76aa4bda7b082a0316f9504cb1c14e3a88f0332b4f9da0f6401f4db8fdaf8196  ./worker/TERMS_REVIEW.md
 81d2ac6d284768a36b21e22fd8ed8d64d38cf85ae0d0235d3750f77feb6804b1  ./worker/package.json
 051d6fcbd41a83564f369cd1617b82bac10dffd997720ad19099909f93ca5661  ./worker/scripts/real_eval.mjs

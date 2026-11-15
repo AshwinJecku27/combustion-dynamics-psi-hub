@@ -30,7 +30,7 @@ Root cause of Q2 and Q4: the store has no report passages for SAFFIRE-II, SAFFIR
   - JSON-schema support for this model;
   - neuron usage;
   - Workers CPU time.
-- **Original dashboard is byte-unchanged:** `index.html`, `psi-hub.html`, `src/`, `data/README.md` and `.github/workflows/pages.yml`. 8 of the 9 entries in `SHA256SUMS.txt` verify. The ninth, `.gitignore`, was listed but never committed to the repository; that predates the SI work. No root `.gitignore` was added, because it could not match the recorded hash.
+- **Original dashboard is byte-unchanged:** `index.html`, `psi-hub.html`, `src/` and `data/README.md`. `.github/workflows/pages.yml` changed once, on purpose, to also publish the SI dashboard at `/si/`; its manifest line was updated (0.7 step 4). 8 of the 9 entries in `SHA256SUMS.txt` verify. The ninth, `.gitignore`, was listed but never committed to the repository; that predates the SI work. No root `.gitignore` was added, because it could not match the recorded hash.
 
 ### 0.2 Layout and provenance
 | Path | What | Status |
@@ -127,7 +127,7 @@ It records every complete response, HTTP status and retry, latency, mode, fallba
 1. Deploy the Worker with Cloudflare Workers Builds (`DEPLOY.md` section 1) and check `/v1/health`. Once the repository is connected, pushes to `main` that touch `si/worker` redeploy it.
 2. Run the real-model evaluation (0.6), review the answers for scientific accuracy, and commit the report.
 3. Build `si.html` with the Worker URL (`DEPLOY.md` section 3).
-4. Publish `si.html` next to `index.html`. This needs a separate pull request that changes the frozen `pages.yml` (one `cp` line) and records the new checksum (`DEPLOY.md` section 4).
+4. Publish the SI dashboard at `/si/`: done in the working tree. `pages.yml` now stages the site with `si-integration/build_pages_site.sh`: root `index.html` byte-identical, SI dashboard at `si/index.html`, Worker address from the optional repository variable `SI_API_BASE`. Ask SI stays unconfigured until that GitHub Actions variable is set to `https://psi-si-api.ashwin-jecku.workers.dev` and the Pages workflow is re-run (`DEPLOY.md` section 4). The `pages.yml` line of `SHA256SUMS.txt` was updated for this one intended change; every other v1 file is untouched.
 5. Optional, recommended: recover the original `si-evidence/` and the release's tooling (`si/evidence/README.md`, "To close the gap").
 6. Keep the "Built with Llama" attribution.
 
