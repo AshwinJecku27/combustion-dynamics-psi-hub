@@ -46,6 +46,20 @@ export function evidenceTexts(pack) {
   return m;
 }
 
+// For each substance or material the pack names, the ids of the records, source passages and calculations whose own
+// text names it (limitations and investigation metadata are left out: they are context, not the exact source). Derived
+// only from the pack's text, so it can never point at evidence the pack does not hold. A term with no entry has no
+// exact source in the pack and must be omitted from findings.
+export function materialSources(pack) {
+  const texts = evidenceTexts(pack); const out = {};
+  const exact = (id) => /^calc:/.test(id) || /^PSI-\d+:/.test(id);
+  for (const [term, res] of Object.entries(TERMS)) {
+    const ids = [...texts].filter(([id, t]) => exact(id) && res.some((re) => re.test(t))).map(([id]) => id);
+    if (ids.length) out[term] = ids;
+  }
+  return out;
+}
+
 // Terms named in `text` that none of `citations` mentions.
 export function ungroundedTerms(text, citations, texts) {
   const cited = (citations || []).map((c) => texts.get(c) || '').join(' \n ');
@@ -63,15 +77,50 @@ export function stripFormulas(text) {
   return String(text).replace(/\b[A-Z][A-Za-z0-9]{0,15}\b/g, (m) => (isFormula(m) ? ' ' : m));
 }
 
-// The store describes every investigation as microgravity or low gravity (LIM-001). A sentence that mentions partial,
-// reduced, lunar or Martian gravity is accepted only if it also states absence or negation (e.g. "no partial-gravity
-// data", "do not establish lunar-gravity behaviour"). This is a sentence-level heuristic: it rejects affirmative
-// statements such as "SAFFIRE-II provides partial-gravity data"; it cannot judge every negated sentence.
-const GRAVITY = /\b(?:partial|reduced|lunar|martian|mars|moon)[- ]?gravity\b|\bhypogravity\b|\b(?:lunar|martian)[- ]g\b/i;
-const NEGATION = /\b(?:no|not|none|never|neither|nor|without|absent|absence|lacks?|lacking|cannot|unavailable|missing|nothing|unknown|untested)\b|n't\b/i;
+// The store describes every investigation as microgravity or low gravity (LIM-001); none is a partial-gravity
+// experiment. Each mention of partial, reduced, lunar or Martian gravity must therefore be an explicit ABSENCE statement.
+// The absence must be attached to that mention inside its own clause (clauses end at , ; : ( ) and at but / while /
+// whereas / although / though / however / yet): a negation elsewhere in the sentence does not count. Accepted forms:
+//   before the mention: "no / without / absence of / lack of [actual|lunar or|any ...] <mention>"; "..., not [actual] <mention>";
+//                       "<subject> do(es)/did/is/are/... not <verb> [at|in|under|for] [any] <mention>"  (never/cannot too);
+//                       "an empty list/set of <...> with <mention>"; "none of the investigations has <mention>";
+//                       "no <investigation|experiment|dataset|file|record> <verb> [any] <mention>";
+//   after the mention:  "<mention> [data|tests|...] is/are/was/were absent|unavailable|missing|not available|not tested|...",
+//                       "<mention> ... does/do not exist"; "whether ... <mention> ... is not tested / is unknown".
+// Everything else (affirmative, hedged or ambiguous, e.g. "limited partial-gravity data", "would need partial-gravity
+// tests") is rejected; the model can always restate it in one of the accepted forms.
+const GRAVITY = /\b(?:partial|reduced|lunar|martian|mars|moon)[- ]?gravity\b|\bhypogravity\b|\b(?:lunar|martian)[- ]g\b/gi;
+const CLAUSE_END = /[,;:()]|\b(?:but|while|whereas|although|though|however|yet)\b/gi;
+const FILL = String.raw`(?:actual|real|measured|true|direct|experimental|genuine|lunar|martian|mars|moon|or|and|nor|such|any|reduced|partial|combustion|fire)`;
+const PRE = [
+  new RegExp(String.raw`\b(?:no|without|zero|absence of|lack of|lacks|lacking)\s+(?:${FILL}\s+){0,3}$`, 'i'),
+  new RegExp(String.raw`\bnot\s+(?:${FILL}\s+){0,2}$`, 'i'), // contrast: "... in microgravity or low gravity, not partial gravity"
+  new RegExp(String.raw`\b(?:(?:do|does|did|is|are|was|were|has|have|had|can|could|would|will)(?:n't|\s+not)|cannot|never)\s+(?:\w+ly\s+)?(?:contain|include|hold|have|provide|report|record|establish|predict|show|represent|reproduce|cover|test|measure|offer|give|simulate|study|address|involve|conducted|performed|run|done|carried out|made|tested|measured|recorded|studied|obtained|acquired|collected)(?:\s+(?:at|in|under|for|on|about))?\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
+  new RegExp(String.raw`\bempty\s+(?:list|set|array|result)\s+(?:of\s+(?:[\w-]+\s+){0,3})?(?:with|having|that\s+(?:have|has|contain|report)|containing|reporting)\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
+  new RegExp(String.raw`\bnone\s+of\s+(?:(?:them|these|those)|(?:the\s+)?(?:[\w-]+\s+){0,2}(?:investigations?|experiments?|datasets?|tests?|files?|records?))\s+(?:has|have|contains?|includes?|reports?|provides?|records?|holds?)\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
+  new RegExp(String.raw`\bno\s+(?:[\w-]+\s+){0,2}(?:investigations?|experiments?|datasets?|tests?|files?|records?)\s+(?:\w+ly\s+)?(?:has|have|contains?|includes?|reports?|provides?|records?|holds?|covers?)\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
+];
+const POST = /^\s*(?:[\w-]+\s+){0,3}?(?:(?:is|are|was|were|remains?)\s+(?:absent|unavailable|missing|lacking|untested|unknown|not\s+(?:available|present|included|recorded|tested|known|measured|covered|established|part of|in))|(?:does|do|did)\s+not\s+exist|(?:does|do)n't\s+exist|(?:has|have)\s+not\s+been\s+(?:tested|measured|studied|recorded))\b/i;
+const WHETHER = /^\s*whether\b/i;
+const WHETHER_TAIL = /\b(?:is|are|remains?)\s+(?:not\s+(?:tested|known|established)|unknown|untested)\b/i;
+
+function clauseAround(sentence, start, end) {
+  let a = 0, b = sentence.length; CLAUSE_END.lastIndex = 0; let m;
+  while ((m = CLAUSE_END.exec(sentence))) { if (m.index + m[0].length <= start) a = m.index + m[0].length; else if (m.index >= end) { b = m.index; break; } }
+  return { pre: sentence.slice(a, start), post: sentence.slice(end, b), clause: sentence.slice(a, b) };
+}
+export function absenceStated(sentence, start, end) {
+  const { pre, post, clause } = clauseAround(sentence, start, end);
+  if (PRE.some((re) => re.test(pre))) return true;
+  if (POST.test(post)) return true;
+  return WHETHER.test(sentence) && WHETHER_TAIL.test(clause + sentence.slice(end));
+}
 export function gravityWordingErrors(texts) {
   const out = [];
-  for (const t of texts) for (const s of String(t || '').split(/(?<=[.!?;])\s+|\n+/)) if (GRAVITY.test(s) && !NEGATION.test(s)) out.push(`gravity wording: "${s.trim().slice(0, 90)}" mentions partial, lunar or Martian gravity without stating that no such data exist`);
+  for (const t of texts) for (const s of String(t || '').split(/(?<=[.!?])\s+|\n+/)) {
+    GRAVITY.lastIndex = 0; let m;
+    while ((m = GRAVITY.exec(s))) if (!absenceStated(s, m.index, m.index + m[0].length)) { out.push(`gravity wording: "${s.trim().slice(0, 90)}" mentions ${m[0]} without an explicit statement that no such data exist`); break; }
+  }
   return out;
 }
 

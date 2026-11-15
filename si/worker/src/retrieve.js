@@ -1,6 +1,7 @@
 // Deterministic retrieval: no model involved. Builds an EvidencePack from the pinned bundle.
 import B from './bundle.js';
 import { namedInvestigations, PASSAGES_BY_KIND } from './investigations.js';
+import { materialSources } from './grounding.js';
 
 const ALIASES = {
   'PSI-10': ['acme', 'flame design', 'extinction temperature', 'normal flame', 'inverse flame', 'ethylene', 'propane', 'burner', 'radiative extinction', 'psi-10'],
@@ -89,6 +90,9 @@ export function buildPack(question) {
   const smallCompact = Object.fromEntries(Object.entries(small).map(([k, v]) => [k, v.map((r) => r.id + ' | ' + r.kind + ' | ' + Object.entries(r.fields).filter(([, x]) => x !== null && x !== '').map(([a, b]) => a + ': ' + b).join('; ') + (r.flags.length ? ' | flags: ' + r.flags.join(',') : ''))]));
   const pack = { store_sha256: B.store_sha256, question_class: cls, investigations: invOut, passages, limitations: lims.map(trim), calculations: calcs, records: smallCompact, comparison_rules: rules,
     identifier_groups: !cls.asksWhichInvestigations && selected.some((s) => ['PSI-69', 'PSI-101'].includes(s)) ? (B.identifier_groups.items || B.identifier_groups.groups || B.identifier_groups) : undefined };
+  // Relevance questions name materials across several investigations (live run #3: Q1 named silicone, Kapton and Pyrell
+  // with citations that never mention them). Give the model the exact ids that name each material in this pack.
+  if (cls.asksWhichInvestigations) pack.material_sources = materialSources(pack);
   const ids = new Set();
   invOut.forEach((i) => ids.add(i.id)); passages.forEach((p) => ids.add(p.id)); lims.forEach((l) => ids.add(l.id)); rules.forEach((r) => ids.add(r.id));
   calcs.forEach((c) => { ids.add(c.id); c.record_ids.forEach((r) => ids.add(r)); });

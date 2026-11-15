@@ -1,4 +1,26 @@
-# SI corrected release r4 (`si/`) versus the original release candidate (`si-release/`)
+# SI corrected release r5 (`si/`) versus the original release candidate (`si-release/`)
+
+## r5 (2026-11-15): the two failures of real-model evaluation run #3
+Run #3 (commit `cdc9115`) gave 4 PASS / 2 FAIL. Q2, Q3, Q4 and Q6 passed. **Neither fix below is verified against the real model yet.**
+
+| Q | Failure | Root cause | Fix |
+|---|---|---|---|
+| Q1 | Finding 2 named silicone, Kapton and Pyrell, but none of its cited evidence mentions them. The rejection was correct. | In the Q1 pack, Kapton and Pyrell are named by exactly one citable item, `calc:samer:breakdown`. SAME-R's report passages never name them, and its row ids carry no text. Nothing told the model which id names which material. | **Grounding validator unchanged and still strict.** Relevance-question packs now carry `material_sources`, derived only from the pack's own text: for each material, the exact record, passage or calculation ids that name it (limitations and investigation metadata are not listed). The prompt says to cite one of those ids or leave the material out, and never to cite one material's record for another. After a grounding rejection, the retry lists the valid ids for each named material, or says to omit it. Q2 to Q6 packs are unchanged. |
+| Q5 | "The calculations showed an empty list of investigations with partial-gravity data", a correct absence statement, was rejected. | The r4 gravity check accepted a sentence only if it contained a negation word anywhere. That wrongly rejects absence stated without "no" or "not", and wrongly accepts an affirmative claim next to an unrelated negation. | **Scoped check:** each partial, lunar or Martian gravity mention must carry an absence statement attached to that phrase, within its own clause. Accepted forms: "no / without / absence of …"; ", not partial gravity"; a negated verb taking the phrase as object ("do not establish lunar-gravity behaviour"); "an empty list … with …"; "none of the investigations / none of them has …"; "… data are absent / not available / not tested"; "whether … is not tested". Affirmative, hedged ("limited partial-gravity data") and ambiguous wording is rejected, as is a negation elsewhere in the sentence ("no doubt SAFFIRE-II has partial-gravity data"). LIM-001 citation, insufficient-evidence status rules and the microgravity / low gravity wording are unchanged. |
+
+Files:
+- `worker/src/grounding.js`: `materialSources`, the scoped `absenceStated` / `gravityWordingErrors`.
+- `worker/src/retrieve.js`: adds `material_sources` to relevance-question packs.
+- `worker/src/core.js`: prompt rules and `groundingGuide` retry text.
+- `worker/src/validate.js`: gravity repair hint.
+- `worker/test/q1_q5_followup.test.mjs` (new): 13 tests.
+- `worker/package.json`: `1.0.0-rc.5`.
+
+Each safeguard was disabled in a scratch copy and its tests were confirmed to fail: the material index, the old sentence-level check, clause scoping, and grounding.
+
+---
+
+# r4 (2026-11-15)
 
 ## r4 (2026-11-15): post-r3 audit fixes
 Real-model evaluation run #2 (commit `2e9a4f8`) reported PASS with 5 model answers. But Q1 hit the 25 s per-call model timeout and fell back, and Q4 mentioned planned SF6 testing without a citation that clearly supported it. The audit confirmed six issues. **None of the fixes below has been checked against the real model yet; that needs a fresh evaluation.** No evidence-store content, limitation, frozen file or existing validator rule was changed or relaxed. Every change adds checks.
