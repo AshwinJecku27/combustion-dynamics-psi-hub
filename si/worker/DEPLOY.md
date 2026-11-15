@@ -81,11 +81,19 @@ when deployment is authorised.
   - `no_key`: the model is not configured;
   - `rate_limited`: daily allocation used up;
   - `provider_error`, `timeout`: the model call failed;
-  - `validation_failed`: the model answered twice and the verifier rejected both.
+  - `validation_failed`: the verifier rejected the model's answer, either twice, or once with no time left to retry (`retry_skipped: deadline`).
+- Validated answers that needed a retry list the first attempt's objections under "Rejected attempts before this answer" (error codes plus the verifier's messages; never the model's text).
 
-The automated verdict is computed from the actual responses:
-- **PASS** needs every Q5/Q6 model answer to have status `insufficient_evidence`, no `provider_error` fallback, at most one validator final rejection per 24 requests, and no HTTP or network errors.
-- **INCONCLUSIVE** means no model answer was obtained.
+Every question gets its own outcome (script version 1.1.0):
+- **PASS:** a validated model answer. For Q5 and Q6 its status must be `insufficient_evidence`. For Q1 to Q4 this covers the automated checks only.
+- **FAIL:** the verifier rejected the model's answer, or a Q5/Q6 answer was not `insufficient_evidence`.
+- **NOT EVALUATED:** there was no model answer to judge (`timeout`, `rate_limited`, `provider_error`, `no_key`, or an HTTP or network error). It never counts as a success.
+
+The automated verdict for the run:
+- **PASS:** every question passed, with no `provider_error` fallback and no HTTP or network errors.
+- **FAIL:** any question failed, or one of those errors occurred.
+- **INCOMPLETE:** no failures, but at least one question was NOT EVALUATED (for example the Q1 timeout in run #2). The verdict names the question and the reason.
+- **INCONCLUSIVE:** no model answer was obtained at all.
 - **PASS does not mean the answers are scientifically correct.** Read every answer against the limitations (LIM-001 to LIM-023) before relying on it.
 
 ## 3. Build the dashboard with the API address
@@ -120,6 +128,12 @@ Never overwrite `index.html` or `psi-hub.html`.
 - **CORS:** browsers from any origin other than `ALLOWED_ORIGIN` get HTTP 403. Requests without an `Origin` header (curl, the evaluation workflow) are allowed. CORS is not authentication.
 - **Rate limits:** 6 requests/min per IP and 300/day are counted in memory per Worker instance. Cloudflare may run several instances and recycle them, so the limits are best-effort, not global. The hard cost ceiling is the Workers AI free allocation (10,000 neurons/day, reset 00:00 UTC). On the free plan further calls fail, and the page shows the evidence-only fallback.
 - **Request limits:** the body must be at most 2,000 characters and the question 5 to 500 characters. Only `GET /v1/health`, `POST /v1/ask` and `OPTIONS` are served.
+- **Time limits:**
+  - **Per model call:** `SI_MODEL_TIMEOUT_MS`, default 25,000 ms. The JSON-schema attempt and its schema-less retry share this one budget.
+  - **Per request:** `SI_REQUEST_DEADLINE_MS`, default 45,000 ms. A retry after a rejected answer is started only if a full per-call budget still fits; otherwise the evidence-only fallback is returned.
+  - **What a timeout means:** the Worker stops waiting, but does not cancel the model call. The runtime gives no cancellation guarantee, so an abandoned generation may keep running and may still count against the Workers AI allocation.
+  - **Raising the limits** makes users wait longer. Worst case per request is about the deadline. The evaluation script's 90 s client timeout must stay above it.
+  - Neither variable is set in `wrangler.toml`; the defaults apply.
 - **Not yet verified on Cloudflare:**
   - real answer quality;
   - whether this model accepts the JSON schema (the Worker retries without it if refused);

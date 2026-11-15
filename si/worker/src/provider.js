@@ -30,17 +30,20 @@ async function post(fetchImpl, url, headers, body, timeoutMs) {
   try { return await res.json(); } catch { throw new ProviderError('invalid_response', 'model returned non-JSON'); }
 }
 
+// A caller-supplied budget (the request deadline) may shorten, never lengthen, the configured per-call timeout.
+const within = (timeoutMs, budgetMs) => Math.max(1, Math.min(timeoutMs, Number.isFinite(budgetMs) ? budgetMs : timeoutMs));
+
 export function makeProvider(env, fetchImpl = fetch) {
   const kind = (env.SI_PROVIDER || 'gemini').toLowerCase();
   const timeoutMs = Number(env.SI_MODEL_TIMEOUT_MS || 25000);
   if (kind === 'gemini') {
     const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
     const base = env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com';
-    return { name: 'gemini', model, configured: !!env.GEMINI_API_KEY,
-      async generate({ system, user }) {
+    return { name: 'gemini', model, configured: !!env.GEMINI_API_KEY, timeoutMs,
+      async generate({ system, user, timeoutMs: budgetMs }) {
         if (!env.GEMINI_API_KEY) throw new ProviderError('no_key', 'GEMINI_API_KEY is not set on the server');
         const j = await post(fetchImpl, `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`, { 'x-goog-api-key': env.GEMINI_API_KEY },
-          { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: SCHEMA } }, timeoutMs);
+          { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: SCHEMA } }, within(timeoutMs, budgetMs));
         const parts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
         const text = parts && parts.map((p) => p.text || '').join('');
         if (!text) throw new ProviderError('invalid_response', 'model returned no text (blocked or empty)');
@@ -49,11 +52,11 @@ export function makeProvider(env, fetchImpl = fetch) {
   }
   if (kind === 'openai_compat') { // any OpenAI-compatible endpoint (Groq, OpenRouter, local); proves the provider is replaceable
     const model = env.OPENAI_COMPAT_MODEL, base = env.OPENAI_COMPAT_BASE_URL;
-    return { name: 'openai_compat', model, configured: !!(env.OPENAI_COMPAT_API_KEY && model && base),
-      async generate({ system, user }) {
+    return { name: 'openai_compat', model, configured: !!(env.OPENAI_COMPAT_API_KEY && model && base), timeoutMs,
+      async generate({ system, user, timeoutMs: budgetMs }) {
         if (!env.OPENAI_COMPAT_API_KEY || !model || !base) throw new ProviderError('no_key', 'OPENAI_COMPAT_* is not set on the server');
         const j = await post(fetchImpl, base.replace(/\/$/, '') + '/chat/completions', { authorization: 'Bearer ' + env.OPENAI_COMPAT_API_KEY },
-          { model, temperature: 0.1, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system + '\nRespond with a single JSON object matching the schema described.' }, { role: 'user', content: user }] }, timeoutMs);
+          { model, temperature: 0.1, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system + '\nRespond with a single JSON object matching the schema described.' }, { role: 'user', content: user }] }, within(timeoutMs, budgetMs));
         const text = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
         if (!text) throw new ProviderError('invalid_response', 'model returned no text');
         return { text, usage: j.usage || null };
@@ -61,12 +64,18 @@ export function makeProvider(env, fetchImpl = fetch) {
   }
   if (kind === 'workers_ai') { // Cloudflare Workers AI through the Worker's AI binding: no API key exists anywhere
     const model = env.WORKERS_AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-    return { name: 'workers_ai', model, configured: !!(env.AI && env.AI.run),
-      async generate({ system, user }) {
+    return { name: 'workers_ai', model, configured: !!(env.AI && env.AI.run), timeoutMs,
+      // One time budget per generate() call (default SI_MODEL_TIMEOUT_MS = 25 s), shared by the json_schema attempt and
+      // its schema-less retry, so one call can never wait longer than the budget. opts.timeoutMs can only shorten it.
+      // On timeout the Worker STOPS WAITING. It does not cancel env.AI.run: the runtime gives no cancellation guarantee
+      // here, so the abandoned generation may keep running and may still count against the Workers AI allocation.
+      async generate({ system, user, timeoutMs: budgetMs }) {
         if (!env.AI || !env.AI.run) throw new ProviderError('no_key', 'Workers AI binding "AI" is not configured');
         const messages = [{ role: 'system', content: system }, { role: 'user', content: user }];
-        const call = (rf) => Promise.race([env.AI.run(model, { messages, max_tokens: 1800, temperature: 0.1, ...(rf ? { response_format: rf } : {}) }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs))]);
+        const budget = within(timeoutMs, budgetMs); const start = Date.now();
+        const call = (rf) => { let timer; const left = Math.max(1, budget - (Date.now() - start));
+          return Promise.race([env.AI.run(model, { messages, max_tokens: 1800, temperature: 0.1, ...(rf ? { response_format: rf } : {}) }),
+            new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('timeout')), left); })]).finally(() => clearTimeout(timer)); };
         let r;
         try {
           try { r = await call({ type: 'json_schema', json_schema: JSON_SCHEMA }); }

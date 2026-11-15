@@ -1,4 +1,22 @@
-# SI corrected release r3 (`si/`) versus the original release candidate (`si-release/`)
+# SI corrected release r4 (`si/`) versus the original release candidate (`si-release/`)
+
+## r4 (2026-11-15): post-r3 audit fixes
+Real-model evaluation run #2 (commit `2e9a4f8`) reported PASS with 5 model answers. But Q1 hit the 25 s per-call model timeout and fell back, and Q4 mentioned planned SF6 testing without a citation that clearly supported it. The audit confirmed six issues. **None of the fixes below has been checked against the real model yet; that needs a fresh evaluation.** No evidence-store content, limitation, frozen file or existing validator rule was changed or relaxed. Every change adds checks.
+
+| # | Issue | Fix | Files |
+|---|---|---|---|
+| 1 | Q1's single model call exceeded the 25 s per-call timeout (the Worker answered HTTP 200 with a `timeout` fallback; the request itself did not time out). A timeout does not cancel the call, and the schema-less retry got a fresh 25 s. | **Smaller Q1:** "which investigations" questions get experiment (`sample`) records only and no identifier groups, so the Q1 pack shrinks from 25,163 to 20,998 characters. The prompt caps the answer size. **Time budget:** one budget per model call, shared with the schema-less retry (timers cleared). A request deadline, `SI_REQUEST_DEADLINE_MS` (default 45 s), stops a retry from starting when a full call no longer fits. The 25 s per-call timeout is unchanged. The code and docs say the Worker stops waiting and does not cancel the call. | `src/provider.js`, `src/core.js`, `src/retrieve.js` |
+| 2 | A claim naming a substance or material could cite an item that never mentions it (an SF6 claim cited to a CO2-only test matrix passed). | **Grounding check:** every substance or material named in a finding or experimental condition must appear in at least one item it cites. Aliases: He/helium, CO2/carbon dioxide, N2/nitrogen, SIBAL/cotton-fiberglass, chemical formulas. Belonging to the same investigation is not enough. Uncited interpretation findings that name a substance are rejected. | new `src/grounding.js`, `src/validate.js` |
+| 3 | The "6" in "SF6" (and digits in other formulas) was read as a numerical claim. | Formula-shaped tokens (real element symbols with subscripts of at most 2 digits, such as `SF6`, `C4H10` and `CO2`) are removed before the number check. Values such as `0.30`, `20 cm/s`, `600 s` and `731`, and letter-number labels such as `T1130`, are still checked. | `src/grounding.js`, `src/validate.js` |
+| 4 | A timeout fallback still gave an overall PASS. | Each question is PASS, FAIL or NOT EVALUATED, and the run verdict becomes `INCOMPLETE` when any question is NOT EVALUATED. A rejected model answer now FAILs its question (previously one rejection per 24 requests was tolerated). The six benchmarks are reported question by question. | `scripts/real_eval.mjs` (v1.1.0) |
+| 5 | Why the first attempts of Q2 and Q4 were rejected was invisible. | `validation.rejected_attempts`: the attempt number, error codes and the verifier's messages (capped), never the model's text or provider details. The dashboard does not display them for model answers; the evaluation report does. | `src/core.js`, `scripts/real_eval.mjs` |
+| 6 | Planned work could be described as performed, and gravity regimes reworded. | **Prompt:** planned is not performed; quote each investigation's `gravity_regime` exactly; never call anything reduced, partial, lunar or Martian gravity. **Validator:** a sentence mentioning partial, lunar or Martian gravity must also state absence or negation. | `src/core.js`, `src/grounding.js` |
+
+Tests: new `worker/test/post_r3_fixes.test.mjs` (19 tests). Each new safeguard was disabled in a scratch copy, and its tests were confirmed to fail. Existing suites unchanged. `worker/package.json` is now `1.0.0-rc.4`.
+
+---
+
+# r3 (2026-11-14)
 
 ## r3 (2026-11-14): fixes after the first live Workers AI evaluation
 The first live evaluation against the deployed `psi-si-api` Worker gave 4/6 validated model answers. Q2 (SAFFIRE-II) and Q4 (FLEX) fell back to evidence-only on validator errors. Q1 passed but said only that lunar-gravity data is absent. Q3 passed. Q5 and Q6 correctly returned `insufficient_evidence`. There were no HTTP, network or rate-limit errors.
