@@ -1,4 +1,32 @@
-# SI corrected release r5 (`si/`) versus the original release candidate (`si-release/`)
+# SI corrected release r6 (`si/`) versus the original release candidate (`si-release/`)
+
+## r6 (2026-11-15): the two failures of real-model evaluation run #4
+Run #4 (main `379b943`): Q1–Q4 PASS; Q5 and Q6 FAIL. **Not yet verified against the real model.** No validator rule was relaxed. Q1–Q4 prompts, JSON schema and evidence packs are byte-identical to before (tested).
+
+| Q | Failure | Root cause | Fix |
+|---|---|---|---|
+| Q5 | `this question class must be reported as insufficient_evidence or partial`, on both attempts | The code marks this class `question_class.mustBeInsufficient`, but the prompt never referred to it. Rule 6 asks for `insufficient_evidence` only "if the evidence cannot answer", and a plain "No" does answer the question. The prompt's JSON example shows `"answered"`, the schema allowed it, and the retry had no hint for this error. | **Question-class instruction**, appended only for this class: required status, an explicit store-scoped first sentence, no claims about research elsewhere, no presenting microgravity results as lunar-gravity measurements, no risk numbers, LIM-001. **Structured status:** the JSON schema sent to the model narrows the status enum to `insufficient_evidence` / `partial` for this class (`schemaWithStatus` can only narrow). **Retry hint** for the status error. |
+| Q6 | `gravity wording: ... mentions lunar gravity without an explicit statement that no such data exist` | The scoped absence check lacked common correct forms: "no data on combustion at lunar gravity", "no experiments conducted in partial gravity", "none of the investigations was conducted at …", "rather than lunar gravity", and suspended hyphens ("no actual lunar- or partial-gravity data"). The same class instruction was also missing. | Those forms added, each still attached to the mention within its clause. Misleading negation ("no doubts that lunar gravity data exist"), affirmative and ambiguous wording ("would require lunar-gravity data") stay rejected. |
+
+New safeguards (stricter):
+- **Explicit answer:** for partial-gravity-data and validated-risk questions, the direct answer (or reason) must contain an accepted absence statement.
+- **Store scope:** a gravity sentence claiming absence "anywhere", "ever", by "no one" and so on is rejected; absence applies to this evidence store only.
+- **No risk figures:** validated-risk answers may not contain a probability, percentage or odds.
+- **Explicit fallback:** the evidence-only fallback note for this class now answers the question in code-written, store-scoped words ("No. The current integrated PSI evidence store contains no actual partial-gravity … combustion data: calc:partial_gravity is an empty list (LIM-001) …"; Q6 adds "… so it cannot establish a validated lunar-habitat fire-risk probability"). It is still labelled "No AI model was used" and still counts as a fallback (FAIL) in the evaluation.
+
+Files:
+- `worker/src/core.js`: `classInstruction`, `classNote`, `statusEnum`.
+- `worker/src/provider.js`: `schemaWithStatus`.
+- `worker/src/grounding.js`: absence forms, overclaim check, `statesGravityAbsence`.
+- `worker/src/validate.js`: explicit-absence and risk-number checks, hints.
+- `worker/test/q5_q6_eval4.test.mjs` (new): 13 tests.
+- `worker/package.json`: `1.0.0-rc.6`.
+
+Each new safeguard was disabled in a scratch copy, and its tests were confirmed to fail.
+
+---
+
+# r5 (2026-11-15)
 
 ## r5 (2026-11-15): the two failures of real-model evaluation run #3
 Run #3 (commit `cdc9115`) gave 4 PASS / 2 FAIL. Q2, Q3, Q4 and Q6 passed. **Neither fix below is verified against the real model yet.**

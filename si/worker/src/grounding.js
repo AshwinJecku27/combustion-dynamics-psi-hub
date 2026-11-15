@@ -91,14 +91,18 @@ export function stripFormulas(text) {
 // tests") is rejected; the model can always restate it in one of the accepted forms.
 const GRAVITY = /\b(?:partial|reduced|lunar|martian|mars|moon)[- ]?gravity\b|\bhypogravity\b|\b(?:lunar|martian)[- ]g\b/gi;
 const CLAUSE_END = /[,;:()]|\b(?:but|while|whereas|although|though|however|yet)\b/gi;
-const FILL = String.raw`(?:actual|real|measured|true|direct|experimental|genuine|lunar|martian|mars|moon|or|and|nor|such|any|reduced|partial|combustion|fire)`;
+// Filler words may carry a suspended hyphen ("no actual lunar- or partial-gravity data").
+const FILL = String.raw`(?:(?:actual|real|measured|true|direct|experimental|genuine|lunar|martian|mars|moon|or|and|nor|such|any|reduced|partial|combustion|fire)-?)`;
 const PRE = [
   new RegExp(String.raw`\b(?:no|without|zero|absence of|lack of|lacks|lacking)\s+(?:${FILL}\s+){0,3}$`, 'i'),
+  // "no data on combustion at lunar gravity", "no experiments conducted in partial gravity" (evaluation run #4, Q6)
+  new RegExp(String.raw`\bno\s+(?:${FILL}\s+){0,2}(?:data|datasets?|measurements?|experiments?|tests?|results?|evidence|observations?|investigations?)\s+(?:(?:on|of|for|about)\s+(?:(?:${FILL}|flames?|burning)\s+){1,2})?(?:(?:obtained|collected|measured|conducted|performed|recorded|run)\s+)?(?:at|in|under|from|for|on)\s+(?:${FILL}\s+){0,2}$`, 'i'),
+  new RegExp(String.raw`\b(?:rather than|instead of|as opposed to)\s+(?:${FILL}\s+){0,2}$`, 'i'), // "microgravity rather than lunar gravity"
   new RegExp(String.raw`\bnot\s+(?:${FILL}\s+){0,2}$`, 'i'), // contrast: "... in microgravity or low gravity, not partial gravity"
   new RegExp(String.raw`\b(?:(?:do|does|did|is|are|was|were|has|have|had|can|could|would|will)(?:n't|\s+not)|cannot|never)\s+(?:\w+ly\s+)?(?:contain|include|hold|have|provide|report|record|establish|predict|show|represent|reproduce|cover|test|measure|offer|give|simulate|study|address|involve|conducted|performed|run|done|carried out|made|tested|measured|recorded|studied|obtained|acquired|collected)(?:\s+(?:at|in|under|for|on|about))?\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
   new RegExp(String.raw`\bempty\s+(?:list|set|array|result)\s+(?:of\s+(?:[\w-]+\s+){0,3})?(?:with|having|that\s+(?:have|has|contain|report)|containing|reporting)\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
-  new RegExp(String.raw`\bnone\s+of\s+(?:(?:them|these|those)|(?:the\s+)?(?:[\w-]+\s+){0,2}(?:investigations?|experiments?|datasets?|tests?|files?|records?))\s+(?:has|have|contains?|includes?|reports?|provides?|records?|holds?)\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
-  new RegExp(String.raw`\bno\s+(?:[\w-]+\s+){0,2}(?:investigations?|experiments?|datasets?|tests?|files?|records?)\s+(?:\w+ly\s+)?(?:has|have|contains?|includes?|reports?|provides?|records?|holds?|covers?)\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
+  new RegExp(String.raw`\bnone\s+of\s+(?:(?:them|these|those)|(?:the\s+)?(?:[\w-]+\s+){0,2}(?:investigations?|experiments?|datasets?|tests?|files?|records?))\s+(?:has|have|contains?|includes?|reports?|provides?|records?|holds?|(?:was|were)\s+(?:conducted|performed|run|done|carried out|tested)\s+(?:at|in|under))\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
+  new RegExp(String.raw`\bno\s+(?:[\w-]+\s+){0,2}(?:investigations?|experiments?|datasets?|tests?|files?|records?)\s+(?:\w+ly\s+)?(?:has|have|contains?|includes?|reports?|provides?|records?|holds?|covers?|(?:was|were)\s+(?:conducted|performed|run|done|carried out|tested)\s+(?:at|in|under))\s+(?:any\s+)?(?:${FILL}\s+){0,2}$`, 'i'),
 ];
 const POST = /^\s*(?:[\w-]+\s+){0,3}?(?:(?:is|are|was|were|remains?)\s+(?:absent|unavailable|missing|lacking|untested|unknown|not\s+(?:available|present|included|recorded|tested|known|measured|covered|established|part of|in))|(?:does|do|did)\s+not\s+exist|(?:does|do)n't\s+exist|(?:has|have)\s+not\s+been\s+(?:tested|measured|studied|recorded))\b/i;
 const WHETHER = /^\s*whether\b/i;
@@ -115,13 +119,23 @@ export function absenceStated(sentence, start, end) {
   if (POST.test(post)) return true;
   return WHETHER.test(sentence) && WHETHER_TAIL.test(clause + sentence.slice(end));
 }
+// An absence statement covers THIS evidence store only. Claims about all research, anywhere or ever, are not supported
+// by the store and are rejected even when phrased as absence.
+const OVERCLAIM = /\b(?:anywhere|in the world|in existence|ever(?:\s+been)?|ha(?:s|ve) never been|no one|nobody|no (?:other )?(?:research|study|studies|scientist|agency))\b/i;
+const sentences = (t) => String(t || '').split(/(?<=[.!?])\s+|\n+/);
 export function gravityWordingErrors(texts) {
   const out = [];
-  for (const t of texts) for (const s of String(t || '').split(/(?<=[.!?])\s+|\n+/)) {
-    GRAVITY.lastIndex = 0; let m;
-    while ((m = GRAVITY.exec(s))) if (!absenceStated(s, m.index, m.index + m[0].length)) { out.push(`gravity wording: "${s.trim().slice(0, 90)}" mentions ${m[0]} without an explicit statement that no such data exist`); break; }
+  for (const t of texts) for (const s of sentences(t)) {
+    GRAVITY.lastIndex = 0; let m, any = false;
+    while ((m = GRAVITY.exec(s))) { any = true; if (!absenceStated(s, m.index, m.index + m[0].length)) { out.push(`gravity wording: "${s.trim().slice(0, 90)}" mentions ${m[0]} without an explicit statement that no such data exist`); any = false; break; } }
+    if (any && OVERCLAIM.test(s)) out.push(`gravity wording: "${s.trim().slice(0, 90)}" claims more than this evidence store can show (absence applies to the integrated PSI evidence store only)`);
   }
   return out;
+}
+// True if the texts contain at least one partial/lunar/Martian-gravity mention stated as absent (see absenceStated).
+export function statesGravityAbsence(texts) {
+  for (const t of texts) for (const s of sentences(t)) { GRAVITY.lastIndex = 0; let m; while ((m = GRAVITY.exec(s))) if (absenceStated(s, m.index, m.index + m[0].length)) return true; }
+  return false;
 }
 
 // Short machine-readable codes for validator messages (used in retry diagnostics).
@@ -129,6 +143,6 @@ const CODES = [[/not valid JSON/, 'json_invalid'], [/citation not in evidence pa
   [/report_derived finding must cite/, 'report_citation_kind'], [/plan_or_metadata finding must cite/, 'plan_citation_kind'],
   [/measured_data finding must cite|calculated finding must cite|uncited|citations must be an array/, 'citation_kind'], [/evidence belongs to/, 'citation_wrong_investigation'],
   [/but none of its cited evidence/, 'ungrounded_term'], [/banned claim wording/, 'banned_wording'], [/gravity wording/, 'gravity_wording'],
-  [/numbers not found/, 'unsupported_number'], [/LIM-001|cited limitation/, 'missing_limitation'], [/name at least one investigation/, 'missing_investigations'],
+  [/numbers not found/, 'unsupported_number'], [/must state explicitly that the evidence store contains no/, 'explicit_absence'], [/risk number/, 'risk_number'], [/LIM-001|cited limitation/, 'missing_limitation'], [/name at least one investigation/, 'missing_investigations'],
   [/insufficient_evidence|question class|status|answered without findings/, 'status_rule'], [/direct_answer|must be an array|text$|bad evidence_class|not an object/, 'schema']];
 export function errorCode(msg) { const hit = CODES.find(([re]) => re.test(String(msg))); return hit ? hit[1] : 'other'; }
