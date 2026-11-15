@@ -1,4 +1,4 @@
-"""Headless smoke test for the SI dashboard (si/dashboard/si.html, corrected release r2).
+"""Headless smoke test for the SI dashboard (si/dashboard/si.html, corrected release r3).
 The original release candidate file (si-release/dashboard/si.html) is kept unchanged and is known to overflow at 390 px.
 Written during repository integration; NOT the release candidate's own test suite.
 Checks: four sections render without page errors; 'Original dashboard' link targets index.html;
@@ -13,6 +13,8 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
+BENCHMARKS = [l.split("text: '",1)[1].rsplit("'",1)[0] for l in (ROOT / 'si/worker/scripts/real_eval.mjs').read_text().splitlines() if l.strip().startswith("{ id: 'Q")]
+assert len(BENCHMARKS) == 6, BENCHMARKS
 def free_port():
     s = socket.socket(); s.bind(('127.0.0.1', 0)); p = s.getsockname()[1]; s.close(); return p
 
@@ -78,19 +80,41 @@ async def main():
             await m.wait_for_function("document.querySelector('#si-out').innerText.length>40 && !/Retrieving evidence/.test(document.querySelector('#si-out').innerText)", timeout=10000)
             check(not await m.evaluate('document.documentElement.scrollWidth > document.documentElement.clientWidth + 1'), 'no horizontal overflow at 390px with an evidence-only answer shown')
             await m.close()
-            # Desktop rendering of r2 must be pixel-identical to the original release candidate (fix is narrow-screen only)
-            import hashlib
+            # Ask SI is open-ended: a free-text box, no menu of the internal benchmark questions (si/worker/scripts/real_eval.mjs)
+            m = await b.new_page(viewport={'width': 1100, 'height': 900}); await m.goto(page_url + f'?si_api=http://localhost:{api_port}')
+            await m.locator('#nav button').nth(1).click(); await m.wait_for_timeout(200)
+            ask_text = await m.locator('#main').inner_text()
+            check(await m.locator('textarea#si-q').count() == 1 and await m.locator('textarea#si-q').is_editable(), 'Ask SI has an editable free-text question box')
+            check('Example questions' not in ask_text and await m.locator('#main button.link').count() == 0, 'Ask SI shows no canned question menu')
+            check(not any(q in ask_text for q in BENCHMARKS), 'internal benchmark questions are not shown to the public')
+            own = 'How long did the PMMA samples burn compared with the silicone samples?'
+            await m.fill('#si-q', own); await m.click('#si-go')
+            await m.wait_for_function("document.querySelector('#si-out').innerText.length>40 && !/Retrieving evidence/.test(document.querySelector('#si-out').innerText)", timeout=10000)
+            out = await m.locator('#si-out').inner_text()
+            check('Retrieved evidence only' in out and 'Data description (DoD) statement' in out, 'a user-written question reaches the Worker and source passages are labelled by kind')
+            await m.close()
+            # Desktop rendering versus the original release candidate. r3 changes only (a) the Ask SI section and (b) the
+            # Explorer's passage labels (test-plan and DoD statements were all headed "Report quotes"). Everything else
+            # must be pixel-identical; the Explorer must be text-identical once the new labels are removed.
+            import hashlib, re
+            def unlabel(t):
+                t = t.replace('Source passages (', 'Report quotes (').replace('No source passages are stored', 'No report quotes are stored')
+                return re.sub(r'\[(Report quote \(context\)|Report quote|Test plan statement \(intent, not a result\)|Data description \(DoD\) statement)\] ', '', t)
             async def shots(url):
-                pg3 = await b.new_page(viewport={'width': 1100, 'height': 900}); await pg3.goto(url); await pg3.wait_for_timeout(200); hs = []
-                for i in range(4):
+                pg3 = await b.new_page(viewport={'width': 1100, 'height': 900}); await pg3.goto(url); await pg3.wait_for_timeout(200); px, tx = {}, {}
+                for i in (0, 2, 3):
                     await pg3.locator('#nav button').nth(i).click(); await pg3.wait_for_timeout(100)
                     n = await pg3.locator('.list button').count() if i == 2 else 1
                     for k in range(n):
                         if i == 2: await pg3.locator('.list button').nth(k).click(); await pg3.wait_for_timeout(60)
-                        hs.append(hashlib.sha256(await pg3.screenshot(full_page=True)).hexdigest())
-                await pg3.close(); return hs
-            a, c = await shots(f'http://127.0.0.1:{web_port}/si-release/dashboard/si.html'), await shots(page_url)
-            check(len(a) == 9 and a == c, f'desktop 1100px: r2 pixel-identical to the release candidate in {sum(x == y for x, y in zip(a, c))}/{len(a)} views')
+                        px[(i, k)] = hashlib.sha256(await pg3.screenshot(full_page=True)).hexdigest(); tx[(i, k)] = await pg3.locator('#main').inner_text()
+                await pg3.close(); return px, tx
+            (pa, ta), (pc, tc) = await shots(f'http://127.0.0.1:{web_port}/si-release/dashboard/si.html'), await shots(page_url)
+            fixed = [v for v in pa if v[0] != 2]
+            check(len(fixed) == 2 and all(pa[v] == pc[v] for v in fixed), 'desktop 1100px: Overview and Comparisons pixel-identical to the release candidate')
+            ex = [v for v in pa if v[0] == 2]
+            check(len(ex) == 6 and all(unlabel(tc[v]) == ta[v] for v in ex), 'Explorer (6 investigations): text identical to the release candidate apart from passage-kind labels')
+            check(all('Test plan statement' in tc[v] for v in ex if 'FLEX' in tc[v].split('\n')[0] or 'PSI-69:plan' in tc[v]) and any('Test plan statement' in tc[v] for v in ex), 'FLEX test-plan passages are no longer labelled as report quotes')
             await b.close()
     finally:
         api.terminate(); httpd.shutdown()

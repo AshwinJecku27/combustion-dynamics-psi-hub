@@ -1,15 +1,18 @@
 // Deterministic retrieval: no model involved. Builds an EvidencePack from the pinned bundle.
 import B from './bundle.js';
+import { namedInvestigations, PASSAGES_BY_KIND } from './investigations.js';
 
 const ALIASES = {
   'PSI-10': ['acme', 'flame design', 'extinction temperature', 'normal flame', 'inverse flame', 'ethylene', 'propane', 'burner', 'radiative extinction', 'psi-10'],
   'PSI-159': ['cool flame', 'cfi-g', 'ethane', 'butane', 'psi-159', 'pci'],
   'PSI-98': ['saffire-i', 'saffire-1', 'saffire i', 'psi-98', 'saffire'],
-  'PSI-99': ['saffire-ii', 'saffire ii', 'saffire-2', 'saffire', 'silicone', 'sibal', 'psi-99', 'burn', 'burning', 'solid', 'material', 'materials', 'fabric', 'flow', 'thickness', 'spacecraft fire'],
+  'PSI-99': ['saffire-ii', 'saffire ii', 'saffire-2', 'saffire', 'silicone', 'sibal', 'pmma', 'nomex', 'cotton', 'psi-99', 'burn', 'burning', 'solid', 'material', 'materials', 'fabric', 'flow', 'thickness', 'spacecraft fire'],
   'PSI-69': ['flex', 'droplet', 'suppress', 'suppression', 'suppressant', 'methanol', 'heptane', 'diluent', 'helium', 'co2', 'gaseous', 'psi-69', 'extinguish'],
-  'PSI-101': ['same-r', 'same r', 'smoke', 'particle', 'detector', 'detection', 'aerosol', 'psi-101', 'aging', 'aged'],
+  'PSI-101': ['same-r', 'same r', 'smoke', 'particle', 'detect', 'aerosol', 'psi-101', 'aging', 'aged', 'kapton', 'teflon', 'lampwick', 'pyrell'],
 };
 const SOLID = ['solid', 'material', 'materials', 'fabric', 'teflon', 'silicone', 'cotton', 'lampwick'];
+const LIQUID = /droplet|liquid|heptane|methanol|\bfuel\b|flex|suppress|diluent|extinguish/;
+const BROADEN = /\b(other|others|compare|compared|comparison|versus|vs\.?|besides|related|similar|alongside)\b/;
 const STOP = new Set('the a an of and or in to is are was were what does do can it for on with this that how which about from by at as be tell me show there any our'.split(' '));
 const tok = (s) => (s.toLowerCase().match(/[a-z0-9][a-z0-9.\-]*/g) || []).filter((t) => !STOP.has(t));
 
@@ -24,7 +27,11 @@ export function classify(question) {
   const asksPartialGravityData = /(partial|lunar|moon|mars|martian|reduced)[ -]*(gravity|g\b)|lunar habitat|hypogravity/.test(q) && /(data|dataset|measure|tests?|exist|available|have|any)/.test(q) && /(is there|are there|do we have|any|does the|exist|available|actual)/.test(q);
   const asksValidatedRisk = /(probab|likelihood|chance|risk)/.test(q) && /(valid|establish|quantif|calculate|determine|certif|safe)/.test(q);
   const asksSafetyGuarantee = /(is it safe|guarantee|certif)/.test(q);
-  return { mustBeInsufficient: asksPartialGravityData || asksValidatedRisk || asksSafetyGuarantee, asksPartialGravityData, asksValidatedRisk, asksSafetyGuarantee };
+  // Not used to force insufficiency. asksWhichInvestigations: the answer must name investigations from the pack.
+  // mentionsPartialGravityContext: the answer must cite LIM-001 (microgravity results do not establish lunar/Martian behaviour).
+  const asksWhichInvestigations = /\bwhich (investigations?|experiments?|datasets?|studies|tests)\b|\b(most )?relevant (investigations?|experiments?|datasets?|studies)\b|\bwhat (investigations?|experiments?|datasets?|studies) (are|is)\b/.test(q);
+  const mentionsPartialGravityContext = /lunar|\bmoon\b|\bmars\b|martian|partial[ -]?gravity|reduced[ -]?gravity|hypogravity|habitat/.test(q);
+  return { mustBeInsufficient: asksPartialGravityData || asksValidatedRisk || asksSafetyGuarantee, asksPartialGravityData, asksValidatedRisk, asksSafetyGuarantee, asksWhichInvestigations, mentionsPartialGravityContext };
 }
 
 export function buildPack(question) {
@@ -33,9 +40,16 @@ export function buildPack(question) {
   const score = {};
   for (const [id, al] of Object.entries(ALIASES)) score[id] = al.reduce((s, a) => s + (q.includes(a) ? (a.length > 5 ? 2 : 1) : 0), 0);
   if (SOLID.some((w) => q.includes(w))) { score['PSI-99'] += 2; score['PSI-98'] += 1; score['PSI-101'] += 1; }
-  if (/lunar|habitat|moon|partial|mars/.test(q)) { score['PSI-69'] += 1; score['PSI-99'] += 1; }
+  const solidFocus = SOLID.some((w) => q.includes(w)) && !LIQUID.test(q);
+  // FLEX is liquid-droplet combustion (LIM-016): a habitat/lunar mention alone does not make it relevant to a solid-material question.
+  if (/lunar|habitat|moon|partial|mars/.test(q)) { if (!solidFocus) score['PSI-69'] += 1; score['PSI-99'] += 1; }
   let ranked = Object.entries(score).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   let selected = ranked.filter(([, s]) => s > 0).slice(0, 4).map(([id]) => id);
+  // A question that names investigations explicitly (e.g. "SAFFIRE-II") is about those investigations. Keyword spill-over
+  // (e.g. "materials" -> SAME-R) would otherwise fill the pack with other investigations' passages that the model could
+  // mis-cite. Not applied when the question asks to compare or to look beyond the named ones.
+  const named = namedInvestigations(question);
+  if (named.length && !BROADEN.test(q)) selected = named;
   const general = selected.length === 0 || cls.mustBeInsufficient;
   if (general) selected = B.investigations.map((i) => i.id);
   const invs = B.investigations.filter((i) => selected.includes(i.id));
@@ -43,8 +57,14 @@ export function buildPack(question) {
   // passages: BM25 over quote+used_for, restricted to selected investigations, plus top overall
   const pdocs = B.passages.map((p) => tok(p.quote + ' ' + (p.used_for || '') + ' ' + p.id));
   const ps = bm25(pdocs, qt);
-  const passages = B.passages.map((p, i) => ({ p, s: ps[i] + Math.min(p.quote.length, 200) / 400 + (selected.includes(p.id.split(':')[0]) ? 0.5 : 0) }))
-    .filter((x) => selected.includes(x.p.id.split(':')[0]) && x.s > 0.5).sort((a, b) => b.s - a.s || a.p.id.localeCompare(b.p.id)).slice(0, 8).map((x) => x.p);
+  const ranked_p = B.passages.map((p, i) => ({ p, s: ps[i] + Math.min(p.quote.length, 200) / 400 + (selected.includes(p.id.split(':')[0]) ? 0.5 : 0) }))
+    .filter((x) => selected.includes(x.p.id.split(':')[0]) && x.s > 0.5).sort((a, b) => b.s - a.s || a.p.id.localeCompare(b.p.id));
+  let passages;
+  if (general) passages = ranked_p.slice(0, 8).map((x) => x.p); // unchanged for whole-store (insufficient-evidence) questions
+  else { // every selected investigation keeps its best passage, so one investigation cannot crowd out another's sources
+    const first = selected.map((id) => ranked_p.find((x) => x.p.id.split(':')[0] === id)).filter(Boolean);
+    passages = [...first, ...ranked_p.filter((x) => !first.includes(x))].slice(0, 8).sort((a, b) => b.s - a.s || a.p.id.localeCompare(b.p.id)).map((x) => x.p);
+  }
 
   // limitations: mandatory inclusion for selected investigations (+LIM-001 always), ranked by BM25, capped
   const ldocs = B.limitations.map((l) => tok(l.title + ' ' + l.description));
@@ -59,7 +79,7 @@ export function buildPack(question) {
   const calcs = B.calcs.filter(calcWanted).map((c) => ({ ...c, record_ids: c.record_ids.slice(0, 20), record_ids_total: c.record_ids.length }));
   const small = {}; for (const id of selected) if (B.small_investigation_records[id] && !general) small[id] = B.small_investigation_records[id];
   const rules = B.comparison_rules.filter((r) => ['CR-01', 'CR-20', 'CR-21', 'CR-22'].includes(r.id) || (selected.includes('PSI-98') && r.id === 'CR-17') || (selected.includes('PSI-99') && r.id === 'CR-19'));
-  const invOut = invs.map((i) => ({ id: i.id, name: i.name, notes: i.notes, gravity_regime: i.gravity_regime && i.gravity_regime.statement, gravity_basis: i.gravity_regime && i.gravity_regime.status, partial_gravity_data_present: i.partial_gravity_data.present, source_files: i.source_files, observed_fuel_or_material_values: i.observed_fuel_or_material_values, stats: i.stats }));
+  const invOut = invs.map((i) => ({ id: i.id, name: i.name, notes: i.notes, gravity_regime: i.gravity_regime && i.gravity_regime.statement, gravity_basis: i.gravity_regime && i.gravity_regime.status, partial_gravity_data_present: i.partial_gravity_data.present, source_passages_by_kind: PASSAGES_BY_KIND[i.id], source_files: i.source_files, observed_fuel_or_material_values: i.observed_fuel_or_material_values, stats: i.stats }));
 
   const smallIds = Object.values(small).flat().map((r) => r.id);
   const smallCompact = Object.fromEntries(Object.entries(small).map(([k, v]) => [k, v.map((r) => r.id + ' | ' + r.kind + ' | ' + Object.entries(r.fields).filter(([, x]) => x !== null && x !== '').map(([a, b]) => a + ': ' + b).join('; ') + (r.flags.length ? ' | flags: ' + r.flags.join(',') : ''))]));

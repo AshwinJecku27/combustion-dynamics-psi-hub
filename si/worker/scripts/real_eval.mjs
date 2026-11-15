@@ -4,8 +4,8 @@
 // Written during repository integration because the release candidate's scripts/real_eval.mjs was not
 // supplied. It is a new implementation, not a recovered copy of the original.
 //
-// What it does: sends the six competition questions (the dashboard's example questions, kept identical to
-// EX in si/dashboard/si.html by a test) to a running Worker's POST /v1/ask, and records for every request the
+// What it does: sends the six INTERNAL benchmark questions (regression benchmarks; not shown to the public, whose
+// dashboard takes open-ended questions) to a running Worker's POST /v1/ask, and records for every request the
 // complete response body, HTTP status and retries, latency, mode (validated model answer vs evidence-only
 // fallback), validator outcome and whatever usage metadata the Worker returns. It writes
 // test/real_eval_report.json and test/real_eval_report.md.
@@ -38,7 +38,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const SCRIPT_VERSION = '1.0.0';
 export const EXPECTED_STORE_SHA256 = 'a77e55486a4d25f0c284c3467b485f9cc3aeded142a285a9e346357870aed548';
 
-// The six competition questions (identical to EX in si/dashboard/si.html; enforced by test/real_eval.test.mjs).
+// The six internal regression benchmarks. They must stay in this suite; they are deliberately NOT a menu in the public
+// dashboard (si/dashboard/si.html takes free-text questions; enforced by test/real_eval.test.mjs). Offline regression
+// tests for them are in test/benchmark_regression.test.mjs.
 // expect: 'insufficient_evidence' means the only acceptable model status is insufficient_evidence (DEPLOY.md
 // acceptance: "Q5 and Q6 are insufficient_evidence every time"). 'answer' means no fixed expectation; a human
 // must review the content.

@@ -52,7 +52,7 @@ re-applies these values, so edit them there, not in the Cloudflare dashboard:
 
 ## 2. Real-model evaluation (uses Workers AI allowance)
 The evaluation script is `si/worker/scripts/real_eval.mjs`.
-- It asks the six competition questions (the dashboard's example questions) once each by default: 6 requests, at most 12 model calls.
+- It asks the six internal benchmark questions (regression benchmarks; the public dashboard takes open-ended questions and does not list them) once each by default: 6 requests, at most 12 model calls. Offline regression tests for them: `npm test` (`test/benchmark_regression.test.mjs`).
 - It refuses to run more than `max_requests` requests.
 - It stops early if the daily allocation appears used up.
 - It never estimates usage. Workers AI does not return neuron counts, so check **Workers AI** usage in the Cloudflare dashboard after the run.

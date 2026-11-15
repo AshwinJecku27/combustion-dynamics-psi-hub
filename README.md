@@ -5,7 +5,7 @@ An interactive, single-file dashboard built by **Team Combustion Dynamics** for 
 > **Scientific stance:** accuracy over impressive charts. Only values present in the source files are plotted. Every chart and finding is labelled by evidence type (measured CSV data, report-derived, plan/metadata) with provenance. The dashboard states plainly what the data cannot answer. **None of the integrated datasets is a partial-gravity (lunar 0.16 g / Mars 0.38 g) combustion dataset.**
 
 ## Two dashboards in this repository
-| | Original dashboard (v1, **frozen**) | SI dashboard (corrected release r2, **not deployed**) |
+| | Original dashboard (v1, **frozen**) | SI dashboard (corrected release r3) |
 |---|---|---|
 | File | `index.html` = `psi-hub.html` (root) | `si/dashboard/si.html` (the untouched original release candidate is in `si-release/`) |
 | Data | Arrays embedded from `src/` | Evidence store v1.1, pinned by SHA-256 `a77e5548…aed548`, embedded in `si/worker/src/bundle.js` (the store files themselves were not supplied: `si/evidence/README.md`) |
@@ -77,7 +77,7 @@ src/test_playwright.py  Headless regression test used during QC
 data/               Intentionally empty (see data/README.md and HANDOFF.md section 10)
 HANDOFF.md          Architecture, provenance, limitations, SI integration record, deployment
 
-si/                         SI corrected release r2: the deployable copy (si/CHANGES.md lists every difference)
+si/                         SI corrected release r3: the deployable copy (si/CHANGES.md lists every difference)
   SHA256SUMS.txt            Manifest of every file in si/ (verify from inside si/)
   dashboard/si.html         Four-section SI dashboard, 390 px overflow fixed (API address placeholder unfilled)
   worker/                   Cloudflare Worker; Workers Builds root directory = si/worker
@@ -92,7 +92,7 @@ si/                         SI corrected release r2: the deployable copy (si/CHA
   evidence/                 Cross-checks of the embedded store (verify_embedded.mjs, VERIFICATION_RESULTS.md, README.md)
 si-release/                 Original SI release candidate, byte-for-byte from si-release-candidate.zip (kept for provenance)
 si-integration/             Integration tests and helpers (not part of the release candidate)
-  worker_smoke.test.mjs     Worker tests with a MOCK AI binding (+ r2 source identity and wrangler.toml checks)
+  worker_smoke.test.mjs     Worker tests with a MOCK AI binding (+ evidence-store identity and wrangler.toml checks)
   test_si_dashboard.py      Playwright test of si/dashboard/si.html: sections, wiring, overflow at 360-1440 px, desktop identity
   local_worker_server.mjs   Node wrapper around the Worker for local wiring tests (no AI binding)
   configure_dashboard.sh    Writes si-integration/build/si.html with the Worker URL filled in

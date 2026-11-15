@@ -1,4 +1,4 @@
-// Integration smoke tests for the SI release candidate Worker (si/worker, corrected release r2; src/ is byte-identical to si-release/si-api/src).
+// Integration smoke tests for the SI Worker (si/worker, corrected release r3; bundle.js and worker.js are byte-identical to si-release/si-api).
 // Written during repository integration; they are NOT the release candidate's own
 // test suite (test/si.test.js was not included in the supplied ZIP).
 // They import the release-candidate code unmodified and use a MOCK env.AI binding.
@@ -94,12 +94,13 @@ test('HTTP guards: CORS origin, bad input, unknown path', async () => {
   assert.equal((await handleRequest(new Request('http://w/nope'), baseEnv)).status, 404);
 });
 
-test('corrected release r2: Worker source is byte-identical to the original release candidate', async () => {
+test('r3: evidence store and entry point byte-identical to the release candidate; only the documented logic files differ', async () => {
   const { readFile } = await import('node:fs/promises');
-  for (const f of ['src/bundle.js', 'src/core.js', 'src/provider.js', 'src/retrieve.js', 'src/validate.js', 'worker.js', 'TERMS_REVIEW.md']) {
-    const a = await readFile(new URL('../si-release/si-api/' + f, import.meta.url)); const b = await readFile(new URL('../si/worker/' + f, import.meta.url));
-    assert.ok(a.equals(b), f + ' differs from the release candidate');
-  }
+  const same = async (f) => (await readFile(new URL('../si-release/si-api/' + f, import.meta.url))).equals(await readFile(new URL('../si/worker/' + f, import.meta.url)));
+  // The evidence store (bundle.js), the Worker entry point and the terms review must never drift.
+  for (const f of ['src/bundle.js', 'worker.js', 'TERMS_REVIEW.md']) assert.ok(await same(f), f + ' differs from the release candidate');
+  // r3 benchmark fixes (si/CHANGES.md): prompt, schema enum, retrieval and validator. Anything else changing is unexpected.
+  for (const f of ['src/core.js', 'src/provider.js', 'src/retrieve.js', 'src/validate.js']) assert.ok(!(await same(f)), f + ' expected to carry the r3 changes');
 });
 
 test('r2 wrangler.toml: AI binding, exact Pages origin, no secrets', async () => {
