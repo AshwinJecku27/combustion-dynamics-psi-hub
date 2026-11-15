@@ -28,13 +28,16 @@ export function schemaWithStatus(base, statusEnum) {
 async function post(fetchImpl, url, headers, body, timeoutMs) {
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeoutMs);
   let res;
+  const start = Date.now();
+  // Diagnostics carry only the HTTP status and timing: never the URL, headers (API key) or response body.
+  const d = (extra) => ({ source: 'provider_http', elapsed_ms: Date.now() - start, wait_limit_ms: timeoutMs, ...extra });
   try { res = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal: ctl.signal }); }
-  catch (e) { throw new ProviderError(e.name === 'AbortError' ? 'timeout' : 'network_error', 'model request failed: ' + (e.name || 'error')); }
+  catch (e) { throw new ProviderError(e.name === 'AbortError' ? 'timeout' : 'network_error', 'model request failed: ' + (e.name || 'error'), undefined, d({ source: e.name === 'AbortError' ? 'worker_wait_limit' : 'provider_network' })); }
   finally { clearTimeout(t); }
-  if (res.status === 429) throw new ProviderError('rate_limited', 'model rate limit reached', 429);
-  if (res.status === 401 || res.status === 403) throw new ProviderError('auth_error', 'model key rejected', res.status);
-  if (!res.ok) throw new ProviderError('provider_error', 'model returned HTTP ' + res.status, res.status);
-  try { return await res.json(); } catch { throw new ProviderError('invalid_response', 'model returned non-JSON'); }
+  if (res.status === 429) throw new ProviderError('rate_limited', 'model rate limit reached', 429, d({ http_status: 429 }));
+  if (res.status === 401 || res.status === 403) throw new ProviderError('auth_error', 'model key rejected', res.status, d({ http_status: res.status }));
+  if (!res.ok) throw new ProviderError('provider_error', 'model returned HTTP ' + res.status, res.status, d({ http_status: res.status }));
+  try { return await res.json(); } catch { throw new ProviderError('invalid_response', 'model returned non-JSON', undefined, d({ http_status: res.status })); }
 }
 
 // A caller-supplied budget (the request deadline) may shorten, never lengthen, the configured per-call timeout.
@@ -44,13 +47,16 @@ export function makeProvider(env, fetchImpl = fetch) {
   const kind = (env.SI_PROVIDER || 'gemini').toLowerCase();
   const timeoutMs = Number(env.SI_MODEL_TIMEOUT_MS || 25000);
   if (kind === 'gemini') {
-    const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const model = env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
     const base = env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com';
     return { name: 'gemini', model, configured: !!env.GEMINI_API_KEY, timeoutMs,
       async generate({ system, user, timeoutMs: budgetMs, statusEnum }) {
         if (!env.GEMINI_API_KEY) throw new ProviderError('no_key', 'GEMINI_API_KEY is not set on the server');
         const j = await post(fetchImpl, `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`, { 'x-goog-api-key': env.GEMINI_API_KEY },
-          { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: schemaWithStatus(SCHEMA, statusEnum) } }, within(timeoutMs, budgetMs));
+          { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: schemaWithStatus(SCHEMA, statusEnum),
+            // Gemini 2.5 Flash / Flash-Lite only: no "thinking" tokens (thinkingBudget is a 2.5 setting). Other models, including the
+            // configured gemini-3.5-flash-lite, are sent no thinkingConfig and keep their defaults.
+            ...(/^gemini-2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } }, within(timeoutMs, budgetMs));
         const parts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
         const text = parts && parts.map((p) => p.text || '').join('');
         if (!text) throw new ProviderError('invalid_response', 'model returned no text (blocked or empty)');

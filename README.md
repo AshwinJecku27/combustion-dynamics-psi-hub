@@ -13,7 +13,7 @@ The central idea: NASA has valuable combustion research, and SI makes it easier 
 |---|---|
 | SI application | `https://ashwinjecku27.github.io/combustion-dynamics-psi-hub/si/` |
 | Original v1 dashboard (frozen) | `https://ashwinjecku27.github.io/combustion-dynamics-psi-hub/` |
-| API | Cloudflare Worker `psi-si-api`, Workers AI (Llama 3.3 70B) |
+| API | Cloudflare Worker `psi-si-api`; live model: Google Gemini `gemini-3.5-flash-lite` (free tier, server-side key), Workers AI optional |
 
 > **Scientific stance.** The integrated evidence library has six NASA PSI investigations, a small curated subset of NASA's PSI database. **None of them contains partial-gravity (lunar or Martian) combustion data**; microgravity and normal-gravity results are not lunar-gravity measurements. SI never produces fire-risk probabilities.
 

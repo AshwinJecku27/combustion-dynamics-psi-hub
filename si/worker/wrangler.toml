@@ -7,9 +7,9 @@ compatibility_date = "2026-01-01"
 workers_dev = true
 
 [vars]
-SI_PROVIDER = "workers_ai"
+SI_PROVIDER = "gemini"
 WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 # Exact browser origin of the published SI dashboard (scheme + host, no path, no trailing slash).
 # GitHub Pages for this repository serves from https://ashwinjecku27.github.io (path /combustion-dynamics-psi-hub/ is NOT part of the origin).
 # Browser requests from any other origin get HTTP 403. Requests without an Origin header (curl, the GitHub Actions evaluation) are allowed;
@@ -23,6 +23,9 @@ SI_PER_IP_PER_MIN = "6"
 binding = "AI"
 
 # No secrets are needed for Workers AI (the AI binding uses the account the Worker is deployed to).
-# Gemini is NOT used by default (see TERMS_REVIEW.md). If it is ever authorised, set SI_PROVIDER = "gemini" above and add the
-# secret GEMINI_API_KEY in the Cloudflare dashboard: Worker > Settings > Variables and Secrets > Add > type "Secret".
+# Live provider: Gemini (authorised by the team; Workers AI daily allocation exhausted). The key is the Worker SECRET
+# GEMINI_API_KEY (Cloudflare dashboard: Worker > Settings > Variables and Secrets), never in this file. Without it, every answer
+# is the evidence-only fallback; Workers AI is not called. To switch back: SI_PROVIDER = "workers_ai".
+# Free tier only: the key's Google project must have NO billing enabled (check in Google AI Studio). Free-tier quotas are small
+# and Google may use free-tier prompts and responses to improve its products (see TERMS_REVIEW.md); do not enter personal data.
 # Never put a key in this file.
