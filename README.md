@@ -5,7 +5,7 @@ An interactive, single-file dashboard built by **Team Combustion Dynamics** for 
 > **Scientific stance:** accuracy over impressive charts. Only values present in the source files are plotted. Every chart and finding is labelled by evidence type (measured CSV data, report-derived, plan/metadata) with provenance. The dashboard states plainly what the data cannot answer. **None of the integrated datasets is a partial-gravity (lunar 0.16 g / Mars 0.38 g) combustion dataset.**
 
 ## Two dashboards in this repository
-| | Original dashboard (v1, **frozen**) | SI dashboard (corrected release r4) |
+| | Original dashboard (v1, **frozen**) | SI dashboard (corrected release r5) |
 |---|---|---|
 | File | `index.html` = `psi-hub.html` (root) | `si/dashboard/si.html` (the untouched original release candidate is in `si-release/`) |
 | Data | Arrays embedded from `src/` | Evidence store v1.1, pinned by SHA-256 `a77e5548…aed548`, embedded in `si/worker/src/bundle.js` (the store files themselves were not supplied: `si/evidence/README.md`) |
@@ -77,7 +77,7 @@ src/test_playwright.py  Headless regression test used during QC
 data/               Intentionally empty (see data/README.md and HANDOFF.md section 10)
 HANDOFF.md          Architecture, provenance, limitations, SI integration record, deployment
 
-si/                         SI corrected release r4: the deployable copy (si/CHANGES.md lists every difference)
+si/                         SI corrected release r5: the deployable copy (si/CHANGES.md lists every difference)
   SHA256SUMS.txt            Manifest of every file in si/ (verify from inside si/)
   dashboard/si.html         Four-section SI dashboard, 390 px overflow fixed (API address placeholder unfilled)
   worker/                   Cloudflare Worker; Workers Builds root directory = si/worker

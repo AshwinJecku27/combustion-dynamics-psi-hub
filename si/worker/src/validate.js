@@ -98,7 +98,7 @@ export function repairHints(errors) {
   if (/must cite LIM-001/.test(e)) h.push('Add a limitation citing LIM-001: no partial-gravity combustion data; microgravity results do not establish lunar or Martian behaviour.');
   if (/name at least one investigation/.test(e)) h.push('List the relevant investigations from the pack in supporting_investigations and say what each actually tested, citing its records or passages.');
   if (/but none of its cited evidence/.test(e)) h.push('Every substance or material a finding names (for example SF6, He, CO2, PMMA, Nomex, silicone, SIBAL, Kapton) must appear in one of the passages, records or limitations it cites. Cite the item that actually names it, or remove it from the finding. A test plan naming an agent is a plan, not a test.');
-  if (/gravity wording/.test(e)) h.push('Use the gravity regime exactly as the evidence states it (microgravity or low gravity). Mention partial, lunar or Martian gravity only to say that no such data exist.');
+  if (/gravity wording/.test(e)) h.push('Use the gravity regime exactly as the evidence states it (microgravity or low gravity). Mention partial, lunar or Martian gravity only in an explicit absence statement whose negation is attached to that phrase, e.g. "No integrated investigation contains partial-gravity combustion data", "calc:partial_gravity is an empty list of investigations with partial-gravity data", "Lunar-gravity data are absent", "... do not establish lunar-gravity behaviour". A "no" or "not" elsewhere in the sentence does not count, and hedged wording ("limited partial-gravity data") is rejected.');
   if (/numbers not found/.test(e)) h.push('Use only numbers that appear in the pack, exactly as written; do not calculate or convert.');
   return h;
 }

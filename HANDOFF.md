@@ -13,7 +13,14 @@ Written so another coding agent can continue this project without the original C
 Sections 1 to 11 below describe the **frozen original dashboard** and are unchanged. This section describes the SI
 release added alongside it. Last updated 2026-11-15 (corrected release r3).
 
-### 0.00 r4: post-r3 audit (read first)
+### 0.000 r5: run #3 follow-up (read first)
+Run #3 (on `cdc9115`) gave 4 PASS / 2 FAIL.
+- **Q1:** materials were named with citations that don't mention them. Fixed by a `material_sources` index for relevance-question packs and an exact-id retry hint. The grounding check is unchanged.
+- **Q5:** a correct "empty list" absence statement was rejected. Fixed by replacing the sentence-level no/not check with a clause-scoped absence check.
+
+Details: `si/CHANGES.md` (r5). **Not yet verified against the real model.**
+
+### 0.00 r4: post-r3 audit
 Evaluation run #2 on `2e9a4f8` reported PASS with 5 model answers, but Q1 fell back after the 25 s per-call model timeout. r4 makes several changes:
 - shrinks relevance-question packs and caps the answer size;
 - shares one time budget between a model call and its schema-less retry;
@@ -109,7 +116,7 @@ GitHub Actions "SI real-model evaluation" --(no Origin header)--> same API; writ
 |---|---|
 | `python3 src/test_playwright.py` (original dashboard) | Pass: no page errors, no 390 px overflow, counts as in section 4. |
 | `node --test si-integration/worker_smoke.test.mjs` | 11/11: the original 9, plus evidence-store identity (r3: `bundle.js`, `worker.js` byte-identical) and `wrangler.toml` origin/secrets checks. |
-| `cd si/worker && npm test` | 57/57 (r4: 38 plus 19 in `test/post_r3_fixes.test.mjs`); r3: 13 evaluation-script tests (benchmarks stay internal and are not in the dashboard, argument and allowance guards, health abort, mock-AI runs, 429/500/network handling, reports) plus 25 benchmark regression tests (`test/benchmark_regression.test.mjs`). |
+| `cd si/worker && npm test` | 70/70 (r5: plus 13 in `test/q1_q5_followup.test.mjs`; r4: 38 plus 19 in `test/post_r3_fixes.test.mjs`); r3: 13 evaluation-script tests (benchmarks stay internal and are not in the dashboard, argument and allowance guards, health abort, mock-AI runs, 429/500/network handling, reports) plus 25 benchmark regression tests (`test/benchmark_regression.test.mjs`). |
 | `node si/evidence/verify_embedded.mjs` | 26 PASS, 1 DIFF, 0 FAIL, 4 NOT VERIFIABLE. |
 | `python3 si-integration/test_si_dashboard.py` | 27/27 (r3). Covers: no horizontal overflow at 360/390/768/1100/1440 px; Ask SI has a free-text box and no benchmark menu; a user-written question reaches the Worker; Overview and Comparisons pixel-identical to the release candidate at 1100 px; Explorer text-identical apart from passage-kind labels. |
 | Checksums | v1 8/8 present files OK; `si-release/` 11/11; `si/` all OK. |

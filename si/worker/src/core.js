@@ -2,7 +2,7 @@ import B from './bundle.js';
 import { buildPack } from './retrieve.js';
 import { makeProvider, ProviderError } from './provider.js';
 import { validate, repairHints } from './validate.js';
-import { errorCode } from './grounding.js';
+import { errorCode, materialSources, TERMS } from './grounding.js';
 
 export const SYSTEM = `You are the Scientific Intelligence (SI) assistant of a NASA PSI combustion dashboard. You explain ONLY the EVIDENCE PACK you are given.
 Rules:
@@ -16,9 +16,9 @@ Rules:
    - calculated: cite a calc:* id.
    - interpretation: your own cautious reading of cited evidence.
    Several investigations have no report passages at all (see source_passages_by_kind): never label a plan or DoD statement as report_derived. Support each finding with evidence from the investigation it is about; never cite another investigation's passage or record for it.
-   Every substance or material you name in a finding or condition (agents, fuels, sample materials) must appear in one of the items that finding cites.
+   Every substance or material you name in a finding or condition (agents, fuels, sample materials) must appear in one of the items that finding cites. When the pack has "material_sources", it lists, for each material, the exact record, passage or calculation ids that name it: cite one of those ids in the same finding. If a material is not listed there, or you cannot cite a listed id, leave that material out; do not guess. Do not cite a record of one material to support another (for example a silicone sample for Kapton).
    Planned is not performed: a test plan or DoD states what was intended. Never describe a planned agent, condition or test as tested, performed, measured or as a result unless a record or report passage shows it was; write "the test plan states an intent to examine ...". Only records and report findings describe completed tests and results.
-5. Describe each investigation's gravity regime exactly as its gravity_regime field states it (for example "Microgravity" or "Low gravity"); do not reword one as the other, and never call any of it reduced, partial, lunar or Martian gravity. Mention partial, lunar or Martian gravity only to state that no such data exist.
+5. Describe each investigation's gravity regime exactly as its gravity_regime field states it (for example "Microgravity" or "Low gravity"); do not reword one as the other, and never call any of it reduced, partial, lunar or Martian gravity. Mention partial, lunar or Martian gravity only to state that no such data exist, with the negation attached to that phrase, for example: "No integrated investigation contains partial-gravity combustion data", "calc:partial_gravity is an empty list of investigations with partial-gravity data", "microgravity results do not establish lunar-gravity behaviour". Do not hedge (not "limited partial-gravity data").
    All data are microgravity or normal-gravity experiments. There is no partial-gravity (lunar or Martian) combustion data. Never claim lunar or habitat safety, equivalence, flammability, or suppressant efficacy, and never give risk probabilities.
    Never use these words in any sentence, even a negative one (the verifier rejects them): "prove", "proven", "guarantee", "validate(s) [the] habitat / fire safety / suppression", "demonstrate(s) suppression / efficacy". Say instead, for example, "does not establish suppressant efficacy" or "is condition similarity only, not habitat-level evidence".
 6. If the evidence cannot answer the question (or a part of it), set status to "insufficient_evidence" (or "partial"), say exactly what is missing in insufficient_evidence_reason, and still state what the pack does contain.
@@ -69,7 +69,7 @@ export async function handleAsk(question, env, opts = {}) {
     const remaining = deadline - (Date.now() - t0);
     if (attempts > 0 && remaining < perCall) { retrySkipped = 'deadline'; break; }
     let out;
-    try { out = await provider.generate({ timeoutMs: Math.min(perCall, remaining), system: SYSTEM + (lastErrors ? '\nYour previous answer was rejected by the verifier for: ' + lastErrors.join('; ') + '. Fix these and answer again.' + repairHints(lastErrors).map((x) => '\n- ' + x).join('') : ''), user }); }
+    try { out = await provider.generate({ timeoutMs: Math.min(perCall, remaining), system: SYSTEM + (lastErrors ? '\nYour previous answer was rejected by the verifier for: ' + lastErrors.join('; ') + '. Fix these and answer again.' + repairHints(lastErrors).map((x) => '\n- ' + x).join('') + groundingGuide(lastErrors, pack) : ''), user }); }
     catch (e) { const code = e instanceof ProviderError ? e.code : 'internal_error'; return { ...base, mode: 'fallback', fallback: fallbackAnswer(pack, code), message: `The AI model could not be used (${code}), so only retrieved evidence is shown. This is not an AI answer.` }; }
     usage = out.usage || usage;
     let parsed; try { parsed = JSON.parse(out.text); } catch { lastErrors = ['response was not valid JSON']; rejected.push(diag(attempts, lastErrors)); continue; }
@@ -79,6 +79,14 @@ export async function handleAsk(question, env, opts = {}) {
   }
   return { ...base, mode: 'fallback', fallback: fallbackAnswer(pack, 'validation_failed'), validation: { passed: false, attempts, errors: lastErrors, rejected_attempts: rejected, ...(retrySkipped ? { retry_skipped: retrySkipped } : {}) }, metrics: { latency_ms: Date.now() - t0, usage },
     message: retrySkipped ? 'The AI answer failed evidence validation and there was not enough time to retry, so it was discarded and only retrieved evidence is shown. This is not an AI answer.' : 'The AI answer failed evidence validation twice and was discarded, so only retrieved evidence is shown. This is not an AI answer.' };
+}
+
+// For each material the verifier said was ungrounded: the exact pack ids that name it, or an instruction to omit it.
+export function groundingGuide(errors, pack) {
+  const named = [...new Set((errors || []).map((e) => (String(e).match(/names (\S+) but none of its cited evidence/) || [])[1]).filter((t) => t && TERMS[t]))];
+  if (!named.length) return '';
+  const src = materialSources(pack);
+  return '\nExact evidence for the materials you named:' + named.map((t) => '\n- ' + t + ': ' + (src[t] ? 'cite one of ' + src[t].slice(0, 12).join(', ') + ' in that finding' : 'no record, passage or calculation in the pack names it; omit it')).join('');
 }
 
 const t0req = (env, perCall) => { const d = Number(env.SI_REQUEST_DEADLINE_MS || 45000); return Number.isFinite(d) && d > 0 ? d : Math.max(perCall, 45000); };
