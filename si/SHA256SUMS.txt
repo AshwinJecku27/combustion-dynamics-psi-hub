@@ -1,4 +1,4 @@
-125ba4ae4f2e9fe0122432817004702a2b01636d6f604bebaf7d28d88141b23d  ./CHANGES.md
+44f2841ea35e3286fe6e70568844502980d11d8c1cf16cac72b301d77aff371d  ./CHANGES.md
 4248f17ee9d3900778bbfac4c0b790df16b56889bbb46741f316e0be6083591e  ./dashboard/si.html
 57ca7ba22ccdea4e5eea7f5234f6b3d7b380fb1e6b67463de8db553890adadca  ./evidence/README.md
 dfb501a79eca60e53653b0ccaf8a90f320eec283d7b4ff2d932609f09e64e8e2  ./evidence/VERIFICATION_RESULTS.md
@@ -16,12 +16,12 @@ ce58a828aabeb98df080965deca089402018a0d4baead22f6f0c2e08a3a3a00d  ./worker/src/b
 fb7495eae117261859fcac9ece4b419310b1605ca4b601bbb836332625fbe72e  ./worker/src/core.js
 b47b4f15ac5fb12ced7af36905e72b5de5f5b46e3438f976baea51245950c9de  ./worker/src/grounding.js
 3de91b592c03f45e6318265b712cc2a5cac759af9ea592090504619f9d77bcf2  ./worker/src/investigations.js
-32972fa3b13ddf5b66dd8955ad9dce82c3e17f05d88a5a322a941b7c55f926a2  ./worker/src/provider.js
+5171dd3758eeaea378302f64b414d4fbe538a43c809084ab3b5c736caa2bdc6b  ./worker/src/provider.js
 6bba76ce9db74535b32f82993161d4c5b4adf940a9f498f43e199819f96ad6d8  ./worker/src/retrieve.js
 cce41dc4371dc6e50f2716e0244d31b39143ea51b779eb1917f285e0cb129eef  ./worker/src/support.js
 618c7b442a892f718cf5787a14203ed161a807a773329c3f381c32ac77b0b1fa  ./worker/src/validate.js
 6130dc1081084afec8aa9cb04988fbd636171478d16bb2db916bbffa7182ff5d  ./worker/test/benchmark_regression.test.mjs
-a474f9c02802f62f3d5637a3a292ba73b369d2bbdf934a72ca8065638f3b2390  ./worker/test/gemini_provider.test.mjs
+e2d26e6f7e7948d4eaf5d49af40b06af41b1433610b6b61c4896afeda06f2508  ./worker/test/gemini_provider.test.mjs
 ea218eac127a33f7a7e0111e6a052fe74e16c603a77141e9ec4f5c536f03fe91  ./worker/test/post_r3_fixes.test.mjs
 8c2544c66684842cc458a80172acbb9a6ec26bc084a3324d411bfe674aedb787  ./worker/test/q1_q5_followup.test.mjs
 2d112b8cc66a582d246cc65f55060817912ac0cd955274df38dad90c467f612b  ./worker/test/q5_q6_eval4.test.mjs
@@ -29,4 +29,4 @@ cd8de1c510c5802dda81d0ca3b023f8ddc0691ae351b8b1033613ef5e3bf9dae  ./worker/test/
 55aaa59daf1be4737d607adfddc0c9e3996f6665b6ca2c19e647a5c011e528d0  ./worker/test/support.test.mjs
 f6f8fcd98386fd9029fca86cc9d0d538923b33026a34fd041b03365e44525d83  ./worker/test/timeout_diagnostics.test.mjs
 9953230b1939337dd4a15a0820bb95d72b8724b48f1d56d1d2436fa95078febd  ./worker/worker.js
-e9892c53986aff29950ed3ecad0417d5b1a68e4a13e05a95da57161b4807d8c8  ./worker/wrangler.toml
+4b7f192a8d6f8cbc5bb5d7e9df6a60aca6d5af9db0123a46f5ca02d3a5c3b9f9  ./worker/wrangler.toml

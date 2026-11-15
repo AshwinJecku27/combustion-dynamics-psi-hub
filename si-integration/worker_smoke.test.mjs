@@ -109,7 +109,7 @@ test('r2 wrangler.toml: AI binding, exact Pages origin, no secrets', async () =>
   assert.match(t, /^name = "psi-si-api"$/m); assert.match(t, /^main = "worker.js"$/m);
   assert.match(t, /^\[ai\]\nbinding = "AI"$/m);
   assert.match(t, /^ALLOWED_ORIGIN = "https:\/\/ashwinjecku27\.github\.io"$/m);
-  assert.match(t, /^SI_PROVIDER = "gemini"$/m); assert.match(t, /^GEMINI_MODEL = "gemini-2\.5-flash"$/m);
+  assert.match(t, /^SI_PROVIDER = "gemini"$/m); assert.match(t, /^GEMINI_MODEL = "gemini-3\.5-flash-lite"$/m);
   assert.doesNotMatch(t, /^\s*(GEMINI_API_KEY|OPENAI_COMPAT_API_KEY|CLOUDFLARE_API_TOKEN|account_id)\s*=/m);
   // the exact origin the browser sends is accepted; a path or trailing slash variant would not be
   const env = { ...baseEnv, ALLOWED_ORIGIN: 'https://ashwinjecku27.github.io' };

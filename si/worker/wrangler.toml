@@ -9,7 +9,7 @@ workers_dev = true
 [vars]
 SI_PROVIDER = "gemini"
 WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 # Exact browser origin of the published SI dashboard (scheme + host, no path, no trailing slash).
 # GitHub Pages for this repository serves from https://ashwinjecku27.github.io (path /combustion-dynamics-psi-hub/ is NOT part of the origin).
 # Browser requests from any other origin get HTTP 403. Requests without an Origin header (curl, the GitHub Actions evaluation) are allowed;

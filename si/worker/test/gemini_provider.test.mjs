@@ -25,28 +25,35 @@ function mockFetch(steps) {
   f.calls = calls; return f;
 }
 const workersAiSpy = () => { const s = { n: 0, run: async () => { s.n++; throw new Error('should not be called'); } }; return s; };
-const env = (extra = {}) => ({ SI_PROVIDER: 'gemini', GEMINI_MODEL: 'gemini-2.5-flash', GEMINI_API_KEY: KEY, AI: workersAiSpy(), ...extra });
+const env = (extra = {}) => ({ SI_PROVIDER: 'gemini', GEMINI_MODEL: 'gemini-3.5-flash-lite', GEMINI_API_KEY: KEY, AI: workersAiSpy(), ...extra });
 async function quiet(fn) { const lines = [], o = console.log; console.log = (x) => lines.push(String(x)); try { return { r: await fn(), lines }; } finally { console.log = o; } }
 
-test('deployment config: Gemini is the live provider with gemini-2.5-flash; no key in the repository', async () => {
+test('deployment config: Gemini is the live provider with gemini-3.5-flash-lite; no key in the repository', async () => {
   const t = await readFile(new URL('../wrangler.toml', import.meta.url), 'utf8');
-  assert.match(t, /^SI_PROVIDER = "gemini"$/m); assert.match(t, /^GEMINI_MODEL = "gemini-2\.5-flash"$/m);
+  assert.match(t, /^SI_PROVIDER = "gemini"$/m); assert.match(t, /^GEMINI_MODEL = "gemini-3\.5-flash-lite"$/m); assert.doesNotMatch(t, /gemini-2\.5/);
   assert.doesNotMatch(t, /^\s*GEMINI_API_KEY\s*=/m);
 });
 
 test('success: a valid Gemini answer is validated, scored and labelled as Gemini; the request is built server-side', async () => {
   const f = mockFetch([gem(GOOD)]); const e = env();
   const { r, lines } = await quiet(() => handleAsk(Q2, e, { fetchImpl: f }));
-  assert.equal(r.mode, 'model'); assert.deepEqual(r.model, { provider: 'gemini', name: 'gemini-2.5-flash' });
+  assert.equal(r.mode, 'model'); assert.deepEqual(r.model, { provider: 'gemini', name: 'gemini-3.5-flash-lite' });
   assert.equal(r.validation.attempts, 1); assert.ok(r.evidence_support && r.evidence_support.level);
   assert.equal(f.calls.length, 1); assert.equal(e.AI.n, 0, 'Workers AI is never called');
   const c = f.calls[0];
-  assert.equal(c.url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+  assert.equal(c.url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent');
   assert.ok(!c.url.includes(KEY), 'key is not in the URL'); assert.equal(c.init.headers['x-goog-api-key'], KEY);
   assert.equal(c.body.generationConfig.responseMimeType, 'application/json'); assert.ok(c.body.generationConfig.responseSchema.properties.key_findings);
-  assert.deepEqual(c.body.generationConfig.thinkingConfig, { thinkingBudget: 0 });
+  assert.equal(c.body.generationConfig.thinkingConfig, undefined, 'no 2.5-only thinkingBudget is sent to gemini-3.5-flash-lite');
   assert.match(c.body.systemInstruction.parts[0].text, /^You are the Scientific Intelligence/); assert.match(c.body.contents[0].parts[0].text, /^EVIDENCE PACK/);
   assert.ok(!JSON.stringify(r).includes(KEY) && !lines.join('\n').includes(KEY), 'key never in the response or logs');
+});
+
+test('provider default model is gemini-3.5-flash-lite; thinkingBudget 0 is sent only to Gemini 2.5 Flash models', async () => {
+  const f = mockFetch([gem(GOOD)]); await quiet(() => handleAsk(Q2, env({ GEMINI_MODEL: undefined }), { fetchImpl: f }));
+  assert.match(f.calls[0].url, /\/models\/gemini-3\.5-flash-lite:generateContent$/); assert.equal(f.calls[0].body.generationConfig.thinkingConfig, undefined);
+  const g = mockFetch([gem(GOOD)]); await quiet(() => handleAsk(Q2, env({ GEMINI_MODEL: 'gemini-2.5-flash' }), { fetchImpl: g }));
+  assert.deepEqual(g.calls[0].body.generationConfig.thinkingConfig, { thinkingBudget: 0 });
 });
 
 test('insufficient-evidence class: the Gemini schema narrows status to insufficient_evidence / partial', async () => {

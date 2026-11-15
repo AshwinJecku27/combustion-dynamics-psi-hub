@@ -1,14 +1,16 @@
 # SI release r9 (`si/`) versus the original release candidate (`si-release/`)
 
 ## r9 (2026-11-15): Gemini as the live provider
+**Model update:** a single live test of `gemini-2.5-flash` with this key returned **HTTP 404**. Google's model documentation says Gemini 2.5 access is restricted for new projects, and its pricing page lists `gemini-3.5-flash-lite` as free of charge on the Free Tier. The configured model is therefore `gemini-3.5-flash-lite`. The Gemini 2.5-only `thinkingBudget` setting is not sent to it.
+
 The Workers AI daily allocation is exhausted. The team configured the Worker secret `GEMINI_API_KEY` and authorised Gemini.
-- **Provider switch:** `wrangler.toml` sets `SI_PROVIDER = "gemini"` and `GEMINI_MODEL = "gemini-2.5-flash"`. Workers AI is not called.
+- **Provider switch:** `wrangler.toml` sets `SI_PROVIDER = "gemini"` and `GEMINI_MODEL = "gemini-3.5-flash-lite"`. Workers AI is not called.
 - **Latency and quota:** for Gemini 2.5 Flash models, `provider.js` sends `thinkingConfig.thinkingBudget = 0` (no thinking tokens).
 - **HTTP diagnostics:** status code and timing only; never the URL, key or response body.
 - **Unchanged:** retrieval, prompt, schema, validators, citations, Evidence Support and the evidence-only fallback.
 - **Dashboard:** the overview no longer names Llama as the model; the answer badge shows the model the Worker reports.
 - **Tests:** new `worker/test/gemini_provider.test.mjs` (9, mocked fetch); the smoke test expects the Gemini configuration.
-- **Free tier only:** the key's Google project must have no billing enabled. Free-tier quotas are small (third-party reports from Sept–Oct 2026 suggest about 20 requests/day for 2.5 Flash). Each question uses 1 call, or 2 if the first answer is rejected. Google may use free-tier prompts and responses to improve its products (see `worker/TERMS_REVIEW.md`).
+- **Free tier only:** the key's Google project must have no billing enabled. Free-tier quotas are small (check the project's limits in Google AI Studio). Each question uses 1 call, or 2 if the first answer is rejected. Google may use free-tier prompts and responses to improve its products (see `worker/TERMS_REVIEW.md`).
 - **Revert:** set `SI_PROVIDER = "workers_ai"`.
 
 `worker/package.json`: `1.0.0-rc.9`.

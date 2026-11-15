@@ -47,14 +47,15 @@ export function makeProvider(env, fetchImpl = fetch) {
   const kind = (env.SI_PROVIDER || 'gemini').toLowerCase();
   const timeoutMs = Number(env.SI_MODEL_TIMEOUT_MS || 25000);
   if (kind === 'gemini') {
-    const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const model = env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
     const base = env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com';
     return { name: 'gemini', model, configured: !!env.GEMINI_API_KEY, timeoutMs,
       async generate({ system, user, timeoutMs: budgetMs, statusEnum }) {
         if (!env.GEMINI_API_KEY) throw new ProviderError('no_key', 'GEMINI_API_KEY is not set on the server');
         const j = await post(fetchImpl, `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`, { 'x-goog-api-key': env.GEMINI_API_KEY },
           { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: schemaWithStatus(SCHEMA, statusEnum),
-            // Gemini 2.5 Flash / Flash-Lite: no "thinking" tokens, for low latency and minimal quota use. Other models keep their defaults.
+            // Gemini 2.5 Flash / Flash-Lite only: no "thinking" tokens (thinkingBudget is a 2.5 setting). Other models, including the
+            // configured gemini-3.5-flash-lite, are sent no thinkingConfig and keep their defaults.
             ...(/^gemini-2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } }, within(timeoutMs, budgetMs));
         const parts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
         const text = parts && parts.map((p) => p.text || '').join('');
