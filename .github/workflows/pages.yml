@@ -18,8 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Stage site (index.html only)
-        run: mkdir _site && cp index.html _site/index.html
+      - name: Stage site (index.html unchanged at /, SI dashboard at /si/)
+        env:
+          SI_API_BASE: ${{ vars.SI_API_BASE }}
+        run: bash si-integration/build_pages_site.sh _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
