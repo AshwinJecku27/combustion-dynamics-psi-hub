@@ -115,7 +115,7 @@ python3 src/test_playwright.py
 python3 si-integration/test_si_dashboard.py
 python3 si-integration/test_pages_site.py
 ```
-**Real-model evaluation.** The workflow **SI real-model evaluation (manual)** sends the six internal benchmark questions to the deployed Worker and reports PASS / FAIL / NOT EVALUATED per question. Evaluation #5 passed all six on `186d0ac`. The prompt additions in this release (qualitative interpretation) have not yet been evaluated against the live model.
+**Real-model evaluation.** The workflow **SI real-model evaluation (manual)** sends the six internal benchmark questions to the deployed Worker and reports PASS / FAIL / NOT EVALUATED per question. Evaluation #5 passed all six on `186d0ac`. Evaluation #6, on the deployed r7 prompt, gave 3 of 6 AI answers with about double the latency, so r8 restores the evaluation-#5 prompt (see `si/CHANGES.md`). Fallback responses carry timing diagnostics, and Workers Logs record each AI outcome.
 
 ## Deploy and maintain
 - **SI page:** GitHub Pages (`.github/workflows/pages.yml`) publishes `index.html` unchanged at `/` and the SI page at `/si/`. Ask SI works publicly only when the repository variable `SI_API_BASE` is set (Settings → Secrets and variables → Actions → Variables).

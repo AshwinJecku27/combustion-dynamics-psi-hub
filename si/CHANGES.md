@@ -1,4 +1,42 @@
-# SI release r7 (`si/`) versus the original release candidate (`si-release/`)
+# SI release r8 (`si/`) versus the original release candidate (`si-release/`)
+
+## r8 (2026-11-15): public Ask SI timeouts after r7
+Real-model evaluation #6 ran on the deployed r7 Worker (`32e9b11`). Compared with #5 on `186d0ac`:
+
+| | #5 | #6 |
+|---|---|---|
+| AI answers | 6 of 6 | **3 of 6** |
+| Q1 | 20.2 s | validation_failed (2 attempts), 43.8 s |
+| Q2 | 15.4 s | **timeout**, 25.1 s |
+| Q3 | 11.4 s | 28.9 s (second attempt) |
+| Q4 | 13.1 s | validation_failed (2 attempts), 29.2 s |
+| Q5 | 5.9 s | 18.9 s |
+| Q6 | 7.1 s | 9.4 s |
+
+- **Where the timeout happened:** the Worker's own 25 s per-call wait limit (`SI_MODEL_TIMEOUT_MS`). It was not a Workers AI error, a Worker execution limit, or the 90 s client limit; the Worker returned HTTP 200 with the evidence-only fallback.
+- **The only model-facing change between the two runs:** r7's "Explain, do not only list" rule (one extra interpretation finding). Benchmark packs, user messages and schema were byte-identical.
+- **Most likely cause:** that rule, which lengthened generation and added rejection risk. With one run each, service-load variance is not excluded.
+
+**Fix:**
+- The r7 rule (and its "cite the items it interprets" wording) is reverted. `SYSTEM` is again byte-identical to the evaluation-#5 prompt (SHA-256 `3f0cfe1d…`, pinned by a test).
+- Timeout budgets, model, validators, evidence and the six benchmarks are unchanged.
+- Interpretation findings the model writes are still shown in the "Scientific interpretation" section.
+
+**Diagnostics** (`worker/src/provider.js`, `worker/src/core.js`):
+- **Fallback responses** carry `diagnostics`:
+  - `reason` and `attempt`;
+  - `source`: `worker_wait_limit` or `workers_ai_error`;
+  - `phase`: `json_schema` or `plain_after_schema_rejected`;
+  - `elapsed_ms`, `wait_limit_ms`, `schema_attempt_ms`;
+  - `upstream_error_code`: the numeric Workers AI code only.
+- **Cloudflare Workers Logs:** one JSON line per outcome (`si_ai_fallback` / `si_ai_answer` with latency and token usage). No question text, prompt, evidence or model output is returned or logged.
+- **User-facing messages:** fallback messages now say plainly what happened (time limit, service error, daily allowance) and that the evidence below is unaffected.
+
+Tests: new `worker/test/timeout_diagnostics.test.mjs` (7). The r7 prompt test was removed with the rule. `worker/package.json` is now `1.0.0-rc.8`.
+
+---
+
+# r7 (2026-11-15)
 
 ## r7 (2026-11-15): final product milestone
 Built on `186d0ac`, where real-model evaluation #5 passed all six benchmark questions. **The r7 prompt addition (qualitative interpretation) has not been evaluated against the live model.** The evidence store, its limitations, the frozen v1 dashboard, `si-release/`, `worker.js` and `wrangler.toml` are unchanged. No validator rule was relaxed.
