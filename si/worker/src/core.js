@@ -92,10 +92,14 @@ export async function handleAsk(question, env, opts = {}) {
     if (attempts > 0 && remaining < perCall) { retrySkipped = 'deadline'; break; }
     let out;
     try { out = await provider.generate({ timeoutMs: Math.min(perCall, remaining), statusEnum: cls.mustBeInsufficient ? ['insufficient_evidence', 'partial'] : undefined, system: SYSTEM + classInstruction(cls) + (lastErrors ? '\nYour previous answer was rejected by the verifier for: ' + lastErrors.join('; ') + '. Fix these and answer again.' + repairHints(lastErrors).map((x) => '\n- ' + x).join('') + groundingGuide(lastErrors, pack) : ''), user }); }
-    catch (e) { const code = e instanceof ProviderError ? e.code : 'internal_error'; return { ...base, mode: 'fallback', fallback: fallbackAnswer(pack, code), message: `The AI model could not be used (${code}), so only retrieved evidence is shown. This is not an AI answer.` }; }
+    catch (e) { const code = e instanceof ProviderError ? e.code : 'internal_error';
+      const diagnostics = { reason: code, attempt: attempts + 1, request_elapsed_ms: Date.now() - t0, ...((e && e.detail) || {}) };
+      log({ event: 'si_ai_fallback', ...diagnostics, question_chars: question.length, prompt_chars: user.length });
+      return { ...base, mode: 'fallback', fallback: fallbackAnswer(pack, code), diagnostics, metrics: { latency_ms: Date.now() - t0, usage }, message: fallbackMessage(code, diagnostics) }; }
     usage = out.usage || usage;
     let parsed; try { parsed = JSON.parse(out.text); } catch { lastErrors = ['response was not valid JSON']; rejected.push(diag(attempts, lastErrors)); continue; }
     const v = validate(parsed, { ids, pack, cls, question });
+    if (v.ok) log({ event: 'si_ai_answer', attempts: attempts + 1, latency_ms: Date.now() - t0, usage });
     if (v.ok) return { ...base, mode: 'model', model: { provider: provider.name, name: provider.model }, answer: parsed, evidence_support: evidenceSupport(parsed, { pack, question }), validation: { passed: true, attempts: attempts + 1, rejected_attempts: rejected }, metrics: { latency_ms: Date.now() - t0, usage } };
     lastErrors = v.errors.slice(0, 8); rejected.push(diag(attempts, lastErrors));
   }
@@ -109,6 +113,17 @@ export function groundingGuide(errors, pack) {
   if (!named.length) return '';
   const src = materialSources(pack);
   return '\nExact evidence for the materials you named:' + named.map((t) => '\n- ' + t + ': ' + (src[t] ? 'cite one of ' + src[t].slice(0, 12).join(', ') + ' in that finding' : 'no record, passage or calculation in the pack names it; omit it')).join('');
+}
+
+// One JSON line per AI outcome for Cloudflare Workers Logs (no question text, prompt or model output).
+const log = (o) => { try { console.log(JSON.stringify(o)); } catch { /* logging must never break a request */ } };
+// Plain-language explanation for each fallback reason, shown to the user above the retrieved evidence.
+export function fallbackMessage(code, d = {}) {
+  const s = d.wait_limit_ms ? Math.round(d.wait_limit_ms / 1000) : null;
+  if (code === 'timeout') return (d.source === 'workers_ai_error' ? 'The AI model service reported a timeout' : `The AI model did not finish its answer within the ${s ? s + '-second ' : ''}time limit`) + ', so no AI answer is shown. This can happen when the model service is busy or the answer is long. The retrieved evidence below is unaffected; you can ask again. This is not an AI answer.';
+  if (code === 'rate_limited') return 'The AI model\'s daily usage allowance is used up or the service is at capacity, so no AI answer is shown. The retrieved evidence below is unaffected; AI answers resume when the allowance resets (00:00 UTC). This is not an AI answer.';
+  if (code === 'provider_error' || code === 'invalid_response') return 'The AI model service returned an error, so no AI answer is shown. The retrieved evidence below is unaffected; you can ask again. This is not an AI answer.';
+  return `The AI model could not be used (${code}), so only retrieved evidence is shown. This is not an AI answer.`;
 }
 
 const t0req = (env, perCall) => { const d = Number(env.SI_REQUEST_DEADLINE_MS || 45000); return Number.isFinite(d) && d > 0 ? d : Math.max(perCall, 45000); };

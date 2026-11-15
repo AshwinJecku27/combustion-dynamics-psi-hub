@@ -1,5 +1,5 @@
 // Replaceable model providers. Keys come only from the server environment (env.*), never from the browser.
-export class ProviderError extends Error { constructor(code, msg, status) { super(msg); this.code = code; this.status = status; } }
+export class ProviderError extends Error { constructor(code, msg, status, detail) { super(msg); this.code = code; this.status = status; this.detail = detail || null; } }
 
 const SCHEMA = {
   type: 'OBJECT',
@@ -80,14 +80,21 @@ export function makeProvider(env, fetchImpl = fetch) {
         if (!env.AI || !env.AI.run) throw new ProviderError('no_key', 'Workers AI binding "AI" is not configured');
         const messages = [{ role: 'system', content: system }, { role: 'user', content: user }];
         const budget = within(timeoutMs, budgetMs); const start = Date.now();
+        // Diagnostics (no prompt, model text or raw provider message): which attempt, how long, and whether the Worker's
+        // own wait limit fired or Workers AI itself returned an error (with its numeric code, if any).
+        let phase = 'json_schema', waitLimitHit = false, schemaMs = null;
         const call = (rf) => { let timer; const left = Math.max(1, budget - (Date.now() - start));
           return Promise.race([env.AI.run(model, { messages, max_tokens: 1800, temperature: 0.1, ...(rf ? { response_format: rf } : {}) }),
-            new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('timeout')), left); })]).finally(() => clearTimeout(timer)); };
+            new Promise((_, rej) => { timer = setTimeout(() => { waitLimitHit = true; rej(new Error('timeout')); }, left); })]).finally(() => clearTimeout(timer)); };
         let r;
         try {
           try { r = await call({ type: 'json_schema', json_schema: schemaWithStatus(JSON_SCHEMA, statusEnum) }); }
-          catch (e) { if (/json mode|json_schema|response_format|schema/i.test(String(e && e.message))) r = await call(null); else throw e; } // documented: "JSON Mode couldn't be met"
-        } catch (e) { const m = String(e && e.message || e); throw new ProviderError(/timeout/i.test(m) ? 'timeout' : /neuron|limit|quota|capacity|429|3036|4006/i.test(m) ? 'rate_limited' : 'provider_error', 'Workers AI call failed'); }
+          catch (e) { if (!waitLimitHit && /json mode|json_schema|response_format|schema/i.test(String(e && e.message))) { schemaMs = Date.now() - start; phase = 'plain_after_schema_rejected'; r = await call(null); } else throw e; } // documented: "JSON Mode couldn't be met"
+        } catch (e) {
+          const m = String(e && e.message || e), upstream = (m.match(/\b([345]\d{3})\b/) || [])[1] || null;
+          const code = waitLimitHit || /timeout|timed out/i.test(m) ? 'timeout' : /neuron|limit|quota|capacity|429|3036|4006/i.test(m) ? 'rate_limited' : 'provider_error';
+          throw new ProviderError(code, 'Workers AI call failed', undefined, { source: waitLimitHit ? 'worker_wait_limit' : 'workers_ai_error', phase, elapsed_ms: Date.now() - start, wait_limit_ms: budget, schema_attempt_ms: schemaMs, upstream_error_code: upstream });
+        }
         let text = r && (r.response !== undefined ? r.response : r.result && r.result.response);
         if (text && typeof text === 'object') text = JSON.stringify(text);
         if (!text || typeof text !== 'string') throw new ProviderError('invalid_response', 'model returned no text');
