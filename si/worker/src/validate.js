@@ -1,5 +1,6 @@
 // Code verifier: the model is never the authority. Anything not supported by the EvidencePack is rejected.
 import { namedInvestigations, ownerOf, ACCEPTED_SOURCE_OWNERS, REPORT_KINDS, PLAN_OR_METADATA_KINDS } from './investigations.js';
+import { evidenceTexts, ungroundedTerms, stripFormulas, gravityWordingErrors } from './grounding.js';
 // plan_or_metadata: a statement from a test plan or a data-description document (DoD). These are not NASA report
 // findings, and a plan states intent, not results; they get their own class instead of being passed off as report_derived.
 const STATUS = ['answered', 'partial', 'insufficient_evidence'];
@@ -8,8 +9,8 @@ const BANNED = [/\bproves?\b/i, /\bproven\b/i, /\bguarantee[sd]?\b/i, /\bvalidat
 const isStr = (x) => typeof x === 'string';
 const isArr = (x) => Array.isArray(x);
 
-function numbers(text) {
-  const t = text.replace(/\b(PSI-\d+|LIM-\d+|CR-\d+|IG-[\w\-]+)\b/g, ' ').replace(/[A-Za-z]+:[\w:.\-\/]+/g, ' ').replace(/SAFFIRE-(I{1,3}|\d)|SAME-R|FLEX|CO2|O2|N2|C2H4|C3H8|H2O|PSI|\bII\b/g, ' ');
+export function numbers(text) {
+  const t = stripFormulas(text).replace(/\b(PSI-\d+|LIM-\d+|CR-\d+|IG-[\w\-]+)\b/g, ' ').replace(/[A-Za-z]+:[\w:.\-\/]+/g, ' ').replace(/SAFFIRE-(I{1,3}|\d)|SAME-R|FLEX|CO2|O2|N2|C2H4|C3H8|H2O|PSI|\bII\b/g, ' ');
   return (t.match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
 }
 export function packNumberSet(pack) {
@@ -32,12 +33,16 @@ export function validate(ans, ctx) {
   for (const k of ['key_findings', 'supporting_investigations', 'experimental_conditions', 'limitations']) if (!isArr(ans[k])) errs.push(k + ' must be an array');
   if (errs.length) return { ok: false, errors: errs };
   const kindOf = new Map(((pack && pack.passages) || []).map((p) => [p.id, p.kind]));
+  const evText = evidenceTexts(pack);
+  // Every substance or material a finding or condition names must appear in at least one item it cites. Belonging to the
+  // same investigation is not enough (e.g. an SF6 claim cited to a CO2-only test matrix is rejected).
+  const ground = (text, citations, where) => { for (const t of ungroundedTerms(text, isArr(citations) ? citations : [], evText)) errs.push(`${where}: names ${t} but none of its cited evidence mentions it`); };
   const cite = (arr, where) => { if (!isArr(arr)) { errs.push(where + ': citations must be an array'); return; } arr.forEach((c) => { if (!isStr(c) || !ids.has(c)) errs.push(`${where}: citation not in evidence pack: ${String(c).slice(0, 60)}`); }); };
   const texts = [ans.direct_answer, ans.insufficient_evidence_reason || ''];
   ans.key_findings.forEach((f, i) => {
     if (!f || !isStr(f.text)) return errs.push(`finding ${i}: text`);
     if (!CLASSES.includes(f.evidence_class)) errs.push(`finding ${i}: bad evidence_class`);
-    cite(f.citations, `finding ${i}`); texts.push(f.text);
+    cite(f.citations, `finding ${i}`); texts.push(f.text); ground(f.text, f.citations, `finding ${i}`);
     const c = f.citations || [];
     if (f.evidence_class === 'calculated' && !c.some((x) => x.startsWith('calc:'))) errs.push(`finding ${i}: calculated finding must cite a calc:* id`);
     // Passage kind comes from the evidence pack itself (passages[].kind), not from the model's label.
@@ -58,7 +63,7 @@ export function validate(ans, ctx) {
       if (!ok) errs.push(`finding ${i}: cited ${f.evidence_class} evidence belongs to ${[...new Set(owners)].join(', ')}, not to ${named.join(', ')} named in the finding`);
     }
   });
-  ans.experimental_conditions.forEach((f, i) => { if (!f || !isStr(f.text)) return errs.push(`condition ${i}: text`); cite(f.citations, `condition ${i}`); texts.push(f.text); });
+  ans.experimental_conditions.forEach((f, i) => { if (!f || !isStr(f.text)) return errs.push(`condition ${i}: text`); cite(f.citations, `condition ${i}`); texts.push(f.text); ground(f.text, f.citations, `condition ${i}`); });
   ans.limitations.forEach((f, i) => { if (!f || !isStr(f.text)) return errs.push(`limitation ${i}: text`); cite(f.citations, `limitation ${i}`); texts.push(f.text); });
   ans.supporting_investigations.forEach((s, i) => {
     if (!s || !ids.has(s.investigation_id)) errs.push(`supporting ${i}: unknown investigation ${s && s.investigation_id}`);
@@ -75,6 +80,7 @@ export function validate(ans, ctx) {
   if (cls.asksWhichInvestigations && ans.status !== 'insufficient_evidence' && ans.supporting_investigations.length === 0) errs.push('question asks which investigations are relevant: name at least one investigation from the pack in supporting_investigations, with what it tested');
   const all = texts.join(' \n ');
   BANNED.forEach((re) => { if (re.test(all)) errs.push('banned claim wording: ' + re); });
+  errs.push(...gravityWordingErrors(texts));
   const set = packNumberSet(pack), qn = new Set(numbers(question));
   const bad = [...new Set(numbers(all))].filter((n) => !numberSupported(n, set, qn));
   if (bad.length) errs.push('numbers not found in evidence pack: ' + bad.slice(0, 6).join(', '));
@@ -91,6 +97,8 @@ export function repairHints(errors) {
   if (/banned claim wording/.test(e)) h.push('The verifier rejects the words prove/proven/guarantee and "validate(s) [the] habitat / fire safety / suppression" and "demonstrate(s) suppression/efficacy" in ANY sentence, including negative ones. Rephrase, for example: "does not establish suppressant efficacy", "is condition similarity only, not habitat-level evidence".');
   if (/must cite LIM-001/.test(e)) h.push('Add a limitation citing LIM-001: no partial-gravity combustion data; microgravity results do not establish lunar or Martian behaviour.');
   if (/name at least one investigation/.test(e)) h.push('List the relevant investigations from the pack in supporting_investigations and say what each actually tested, citing its records or passages.');
+  if (/but none of its cited evidence/.test(e)) h.push('Every substance or material a finding names (for example SF6, He, CO2, PMMA, Nomex, silicone, SIBAL, Kapton) must appear in one of the passages, records or limitations it cites. Cite the item that actually names it, or remove it from the finding. A test plan naming an agent is a plan, not a test.');
+  if (/gravity wording/.test(e)) h.push('Use the gravity regime exactly as the evidence states it (microgravity or low gravity). Mention partial, lunar or Martian gravity only to say that no such data exist.');
   if (/numbers not found/.test(e)) h.push('Use only numbers that appear in the pack, exactly as written; do not calculate or convert.');
   return h;
 }

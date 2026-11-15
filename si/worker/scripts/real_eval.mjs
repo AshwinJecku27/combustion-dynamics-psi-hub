@@ -35,7 +35,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const SCRIPT_VERSION = '1.0.0';
+export const SCRIPT_VERSION = '1.1.0';
 export const EXPECTED_STORE_SHA256 = 'a77e55486a4d25f0c284c3467b485f9cc3aeded142a285a9e346357870aed548';
 
 // The six internal regression benchmarks. They must stay in this suite; they are deliberately NOT a menu in the public
@@ -135,12 +135,14 @@ export function classify(q, exchange) {
     r.outcome = 'real_model_answer';
     r.model = body.model || null;
     r.answer_status = body.answer && body.answer.status;
-    r.validator = { passed: true, attempts: body.validation && body.validation.attempts, rejected_attempts: Math.max(0, ((body.validation && body.validation.attempts) || 1) - 1), errors_of_rejected_attempts: 'not returned by the Worker' };
+    const ra = body.validation && Array.isArray(body.validation.rejected_attempts) ? body.validation.rejected_attempts : null;
+    r.validator = { passed: true, attempts: body.validation && body.validation.attempts, rejected_attempts: Math.max(0, ((body.validation && body.validation.attempts) || 1) - 1), errors_of_rejected_attempts: ra || 'not returned by the Worker' };
   } else if (body.mode === 'fallback') {
     r.outcome = 'fallback';
     r.fallback_reason = body.fallback && body.fallback.reason_code;
     r.model_invoked = r.fallback_reason === 'no_key' ? 'no' : r.fallback_reason === 'validation_failed' ? 'yes, output rejected' : 'attempted, call failed';
-    if (body.validation) r.validator = { passed: false, attempts: body.validation.attempts, rejected_attempts: body.validation.attempts, final_errors: body.validation.errors || [] };
+    if (body.validation) r.validator = { passed: false, attempts: body.validation.attempts, rejected_attempts: body.validation.attempts, final_errors: body.validation.errors || [],
+      ...(Array.isArray(body.validation.rejected_attempts) ? { errors_of_rejected_attempts: body.validation.rejected_attempts } : {}), ...(body.validation.retry_skipped ? { retry_skipped: body.validation.retry_skipped } : {}) };
   } else { r.outcome = 'invalid_response'; r.error = 'unknown mode: ' + String(body.mode); }
   return finish(r);
 }
@@ -151,7 +153,33 @@ function finish(r) {
     else if (r.outcome === 'fallback') r.expectation_met = 'not applicable (no model judgement; fallback shown)';
     else r.expectation_met = 'not applicable (request failed)';
   } else r.expectation_met = r.outcome === 'real_model_answer' ? 'needs human review' : 'not applicable';
+  Object.assign(r, evaluate(r));
   return r;
+}
+
+// Per-request evaluation. Only a validated model answer can PASS. A rejected model answer FAILS. Anything where the
+// model's answer could not be judged (timeout, quota, provider or network error, model not configured) is NOT_EVALUATED:
+// it never counts as a success. PASS for an 'answer' question covers the automated checks only; a human must review it.
+export function evaluate(r) {
+  if (r.outcome === 'real_model_answer') {
+    if (r.expectation === 'insufficient_evidence' && r.answer_status !== 'insufficient_evidence') return { evaluation: 'FAIL', evaluation_reason: `model status ${r.answer_status}; expected insufficient_evidence` };
+    return { evaluation: 'PASS', evaluation_reason: r.expectation === 'insufficient_evidence' ? 'insufficient_evidence as required' : 'validated model answer (automated checks only; needs scientific review)' };
+  }
+  if (r.outcome === 'fallback' && r.fallback_reason === 'validation_failed') return { evaluation: 'FAIL', evaluation_reason: 'model answer rejected by the validator' + (r.validator && r.validator.retry_skipped ? ' (retry skipped: ' + r.validator.retry_skipped + ')' : '') };
+  if (r.outcome === 'fallback') return { evaluation: 'NOT_EVALUATED', evaluation_reason: `no model answer to judge (fallback: ${r.fallback_reason})` };
+  return { evaluation: 'NOT_EVALUATED', evaluation_reason: `request failed (${r.outcome}${r.error ? ': ' + r.error : ''})` };
+}
+
+// One outcome per benchmark question across its repetitions: FAIL if any repetition failed, else NOT_EVALUATED if any
+// repetition could not be judged, else PASS.
+export function questionOutcomes(results) {
+  const by = new Map();
+  for (const r of results) { if (!by.has(r.question_id)) by.set(r.question_id, []); by.get(r.question_id).push(r); }
+  return [...by].map(([id, rs]) => {
+    const e = rs.map((r) => r.evaluation);
+    const outcome = e.includes('FAIL') ? 'FAIL' : e.includes('NOT_EVALUATED') ? 'NOT_EVALUATED' : 'PASS';
+    return { question_id: id, outcome, repetitions: rs.length, reasons: [...new Set(rs.map((r) => r.evaluation_reason))] };
+  });
 }
 
 const QUOTA_REASONS = new Set(['rate_limited']);
@@ -217,6 +245,9 @@ export function summarize(report) {
       note: 'Totals are sums of values the Worker returned; null means not reported for every response. Neurons are not returned by Workers AI here; check the Cloudflare dashboard (Workers AI usage) for the day of the run.' },
     insufficient_evidence_checks: { model_answers: ins.length, met: ins.filter((r) => r.expectation_met === true).length },
   };
+  s.question_outcomes = questionOutcomes(R);
+  const notEval = s.question_outcomes.filter((q) => q.outcome === 'NOT_EVALUATED'), failedQ = s.question_outcomes.filter((q) => q.outcome === 'FAIL');
+  s.counts = { PASS: s.question_outcomes.filter((q) => q.outcome === 'PASS').length, FAIL: failedQ.length, NOT_EVALUATED: notEval.length };
   const reasons = [];
   if (report.aborted && !R.length) reasons.push('run aborted before any question was asked');
   if (s.real_model_answers === 0) reasons.push('no validated model answers were returned');
@@ -224,11 +255,15 @@ export function summarize(report) {
   if (reasons.length) verdict = 'INCONCLUSIVE';
   else {
     const fails = [];
+    if (failedQ.length) fails.push('question(s) FAILED: ' + failedQ.map((q) => q.question_id).join(', '));
     if (s.insufficient_evidence_checks.met < s.insufficient_evidence_checks.model_answers) fails.push('a Q5/Q6 model answer was not insufficient_evidence');
     if ((fallbackReasons.provider_error || 0) > 0) fails.push('fallback caused by provider_error');
     if (s.validator_final_rejections > Math.max(1, Math.floor(R.length / 24))) fails.push('more than 1 validator final rejection per 24 requests');
     if (s.http_errors + s.network_errors + s.invalid_responses > 0) fails.push('HTTP, network or invalid-response errors occurred');
-    verdict = fails.length ? 'FAIL' : 'PASS (automated checks only; answers still need scientific review)'; reasons.push(...fails);
+    // A question that was NOT EVALUATED (e.g. a timeout) never counts as passed: the run is INCOMPLETE, not PASS.
+    verdict = fails.length ? 'FAIL' : notEval.length ? `INCOMPLETE (${notEval.length} of ${s.question_outcomes.length} question(s) NOT EVALUATED: ${notEval.map((q) => q.question_id + ' ' + q.reasons.join('; ')).join(', ')})`
+      : 'PASS (automated checks only; answers still need scientific review)';
+    reasons.push(...fails);
   }
   if (report.target_is_local) reasons.push('target is localhost: it may be wrangler dev --remote (real model) or a local mock; the report cannot tell which');
   s.automated_verdict = verdict; s.verdict_notes = reasons;
@@ -253,6 +288,10 @@ export function renderMarkdown(rep) {
   L.push('', '## Summary', '');
   L.push(`**Automated verdict: ${s.automated_verdict}**`, '');
   s.verdict_notes.forEach((n) => L.push(`- ${n}`));
+  if (s.question_outcomes && s.question_outcomes.length) {
+    L.push('', `**Questions:** ${s.counts.PASS} PASS, ${s.counts.FAIL} FAIL, ${s.counts.NOT_EVALUATED} NOT EVALUATED`, '', '| Question | Outcome | Reason |', '|---|---|---|');
+    s.question_outcomes.forEach((q) => L.push(`| ${q.question_id} | **${q.outcome.replace('_', ' ')}** | ${esc(q.reasons.join('; '))} |`));
+  }
   L.push('', '| Measure | Value |', '|---|---|');
   L.push(`| Requests sent | ${s.requests_sent} of ${rep.planned_requests} planned |`, `| Real model answers | ${s.real_model_answers} |`,
     `| Fallbacks (evidence only) | ${s.fallbacks}${Object.keys(s.fallback_reasons).length ? ' (' + Object.entries(s.fallback_reasons).map(([k, v]) => k + ': ' + v).join(', ') + ')' : ''} |`,
@@ -262,8 +301,8 @@ export function renderMarkdown(rep) {
     `| Latency (last attempt, ms) p50 / p90 / max | ${s.latency_ms.p50 ?? 'n/a'} / ${s.latency_ms.p90 ?? 'n/a'} / ${s.latency_ms.max ?? 'n/a'} |`,
     `| Tokens prompt / completion / total | ${s.usage.prompt_tokens ?? 'not reported'} / ${s.usage.completion_tokens ?? 'not reported'} / ${s.usage.total_tokens ?? 'not reported'} (from ${s.usage.responses_with_usage} responses) |`,
     `| Neurons | ${s.usage.neurons ?? 'not reported by the API'} |`, '', `_${s.usage.note}_`, '');
-  L.push('## Per request', '', '| Q | Rep | Outcome | HTTP | Model status | Validator attempts | Latency ms | Tokens (total) | Expectation |', '|---|---|---|---|---|---|---|---|---|');
-  for (const r of rep.results) L.push(`| ${r.question_id} | ${r.rep} | ${r.outcome === 'real_model_answer' ? '**REAL MODEL ANSWER**' : r.outcome === 'fallback' ? 'FALLBACK (' + esc(r.fallback_reason) + ')' : esc(r.outcome.toUpperCase())} | ${r.http_attempts.map((a) => a.http_status || 'ERR').join(',')} | ${esc(r.answer_status || '')} | ${r.validator ? r.validator.attempts : ''} | ${r.latency_ms_total} | ${r.usage && typeof r.usage.total_tokens === 'number' ? r.usage.total_tokens : 'not reported'} | ${esc(r.expectation_met)} |`);
+  L.push('## Per request', '', '| Q | Rep | Evaluation | Outcome | HTTP | Model status | Validator attempts | Latency ms | Tokens (total) | Expectation |', '|---|---|---|---|---|---|---|---|---|---|');
+  for (const r of rep.results) L.push(`| ${r.question_id} | ${r.rep} | ${(r.evaluation || '').replace('_', ' ')} | ${r.outcome === 'real_model_answer' ? '**REAL MODEL ANSWER**' : r.outcome === 'fallback' ? 'FALLBACK (' + esc(r.fallback_reason) + ')' : esc(r.outcome.toUpperCase())} | ${r.http_attempts.map((a) => a.http_status || 'ERR').join(',')} | ${esc(r.answer_status || '')} | ${r.validator ? r.validator.attempts : ''} | ${r.latency_ms_total} | ${r.usage && typeof r.usage.total_tokens === 'number' ? r.usage.total_tokens : 'not reported'} | ${esc(r.expectation_met)} |`);
   L.push('', '## Complete responses', '');
   for (const r of rep.results) {
     L.push(`### ${r.question_id} (rep ${r.rep}): ${r.outcome === 'real_model_answer' ? 'REAL MODEL ANSWER' : r.outcome === 'fallback' ? 'FALLBACK, no AI text' : r.outcome.toUpperCase()}`, '', `**Question:** ${r.question}`, '');
@@ -276,9 +315,11 @@ export function renderMarkdown(rep) {
       for (const [k, title] of [['key_findings', 'Key findings'], ['experimental_conditions', 'Experimental conditions'], ['limitations', 'Limitations']]) {
         if (Array.isArray(a[k]) && a[k].length) { L.push(`**${title}:**`); a[k].forEach((f) => L.push(`- ${f.evidence_class ? '[' + f.evidence_class + '] ' : ''}${f.text} (${(f.citations || []).join(', ')})`)); L.push(''); }
       }
+      if (r.validator && Array.isArray(r.validator.errors_of_rejected_attempts) && r.validator.errors_of_rejected_attempts.length) { L.push('**Rejected attempts before this answer:**'); r.validator.errors_of_rejected_attempts.forEach((x) => L.push(`- attempt ${x.attempt}: ${(x.error_codes || []).join(', ')}: ${(x.errors || []).join('; ')}`)); L.push(''); }
       if (Array.isArray(a.supporting_investigations) && a.supporting_investigations.length) { L.push('**Supporting investigations:**'); a.supporting_investigations.forEach((s2) => L.push(`- ${s2.investigation_id}: ${s2.role}${s2.record_ids && s2.record_ids.length ? ' (' + s2.record_ids.join(', ') + ')' : ''}`)); L.push(''); }
     } else if (r.outcome === 'fallback') {
       L.push(`Reason: \`${esc(r.fallback_reason)}\`. Model invoked: ${r.model_invoked}. ${esc(b.message)}`, '');
+      if (r.validator && r.validator.retry_skipped) L.push(`Retry skipped: ${esc(r.validator.retry_skipped)} (not enough time left before the request deadline).`, '');
       if (r.validator && r.validator.final_errors && r.validator.final_errors.length) { L.push('**Validator errors on the final attempt:**'); r.validator.final_errors.forEach((e) => L.push(`- ${e}`)); L.push(''); }
     }
     L.push('<details><summary>Full response body</summary>', '', '```json', b ? JSON.stringify(b, null, 2) : String(r.raw_body ?? '(none)'), '```', '', '</details>', '');

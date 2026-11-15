@@ -77,14 +77,18 @@ export function buildPack(question) {
 
   const calcWanted = (c) => c.id === 'calc:partial_gravity' || selected.some((s) => c.id === 'calc:count:' + s) || (c.id.startsWith('calc:flex') && selected.includes('PSI-69')) || (c.id === 'calc:samer:breakdown' && selected.includes('PSI-101'));
   const calcs = B.calcs.filter(calcWanted).map((c) => ({ ...c, record_ids: c.record_ids.slice(0, 20), record_ids_total: c.record_ids.length }));
-  const small = {}; for (const id of selected) if (B.small_investigation_records[id] && !general) small[id] = B.small_investigation_records[id];
+  // A "which investigations are relevant" question needs what each investigation tested, not every row: it gets the
+  // experiment ('sample') records only, without DoD rows, CSV notes and reference rows. This keeps the pack, and the
+  // model's answer, small enough to finish inside the per-call time budget (first live evaluation: Q1 timed out).
+  const keepRow = (r) => !cls.asksWhichInvestigations || r.kind === 'sample';
+  const small = {}; for (const id of selected) if (B.small_investigation_records[id] && !general) small[id] = B.small_investigation_records[id].filter(keepRow);
   const rules = B.comparison_rules.filter((r) => ['CR-01', 'CR-20', 'CR-21', 'CR-22'].includes(r.id) || (selected.includes('PSI-98') && r.id === 'CR-17') || (selected.includes('PSI-99') && r.id === 'CR-19'));
   const invOut = invs.map((i) => ({ id: i.id, name: i.name, notes: i.notes, gravity_regime: i.gravity_regime && i.gravity_regime.statement, gravity_basis: i.gravity_regime && i.gravity_regime.status, partial_gravity_data_present: i.partial_gravity_data.present, source_passages_by_kind: PASSAGES_BY_KIND[i.id], source_files: i.source_files, observed_fuel_or_material_values: i.observed_fuel_or_material_values, stats: i.stats }));
 
   const smallIds = Object.values(small).flat().map((r) => r.id);
   const smallCompact = Object.fromEntries(Object.entries(small).map(([k, v]) => [k, v.map((r) => r.id + ' | ' + r.kind + ' | ' + Object.entries(r.fields).filter(([, x]) => x !== null && x !== '').map(([a, b]) => a + ': ' + b).join('; ') + (r.flags.length ? ' | flags: ' + r.flags.join(',') : ''))]));
   const pack = { store_sha256: B.store_sha256, question_class: cls, investigations: invOut, passages, limitations: lims.map(trim), calculations: calcs, records: smallCompact, comparison_rules: rules,
-    identifier_groups: selected.some((s) => ['PSI-69', 'PSI-101'].includes(s)) ? (B.identifier_groups.items || B.identifier_groups.groups || B.identifier_groups) : undefined };
+    identifier_groups: !cls.asksWhichInvestigations && selected.some((s) => ['PSI-69', 'PSI-101'].includes(s)) ? (B.identifier_groups.items || B.identifier_groups.groups || B.identifier_groups) : undefined };
   const ids = new Set();
   invOut.forEach((i) => ids.add(i.id)); passages.forEach((p) => ids.add(p.id)); lims.forEach((l) => ids.add(l.id)); rules.forEach((r) => ids.add(r.id));
   calcs.forEach((c) => { ids.add(c.id); c.record_ids.forEach((r) => ids.add(r)); });
