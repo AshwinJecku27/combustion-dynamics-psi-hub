@@ -1,4 +1,36 @@
-# SI corrected release r6 (`si/`) versus the original release candidate (`si-release/`)
+# SI release r7 (`si/`) versus the original release candidate (`si-release/`)
+
+## r7 (2026-11-15): final product milestone
+Built on `186d0ac`, where real-model evaluation #5 passed all six benchmark questions. **The r7 prompt addition (qualitative interpretation) has not been evaluated against the live model.** The evidence store, its limitations, the frozen v1 dashboard, `si-release/`, `worker.js` and `wrangler.toml` are unchanged. No validator rule was relaxed.
+
+| Area | Change | Files |
+|---|---|---|
+| Ask SI | **Answer structure:** Direct answer → What the evidence shows (typed by evidence class) → Scientific interpretation (labelled, not a result) → Experimental conditions → Limitations → Sources. Empty sections are hidden. **Sources:** every citation opens the exact source in a dialog (passage quote with locator, record values and store flags with the investigation's limitations, limitation text, calculation). **Labels:** clear AI vs evidence-only labelling; failed verification is shown, collapsed. **Examples:** example questions that only prefill (none is a benchmark). | `dashboard/si.html` |
+| Evidence Support | **New:** deterministic indicator (Strong / Moderate / Limited / Insufficient) for validated answers only. Components are computed exactly. Caps: partial answers, and statements relying on a store-flagged discrepancy (keyword-scoped to the flagged quantity). It states what it does not evaluate (semantic entailment, contradictions beyond store flags, correctness of the research). It is not a probability. | `worker/src/support.js` (new), `worker/src/core.js` |
+| Qualitative explanation | **Prompt:** when the pack allows, one cited interpretation finding explaining what the results mean, why the recorded conditions matter, and the relevance to prevention, detection or suppression. It never adds a mechanism, trend, relationship or number the pack does not state. Interpretation findings are asked to cite what they interpret. | `worker/src/core.js` |
+| Design | **Visual:** new restrained dark scientific design with one blue accent and fine borders; no third-party fonts, images or scripts. **Responsive:** 360–1440 px with no overflow; the insights matrix stacks on phones; records are collapsed by default. | `dashboard/si.html` |
+| Overview | **Purpose first:** purpose headline and two calls to action. **Accurate statistics:** passages broken down as 23 report / 7 test plan / 4 DoD; the old label "verified report quotes" was inaccurate. **Scope:** explicit statement that the library is a small subset of PSI. **Research areas:** prevention, detection and suppression, using the store's own team classification, labelled as SI classification. | `dashboard/si.html` |
+| Investigations | **Search:** by name, ID or topic. **Objective:** quoted from the store, or "not stated". **Environment and contents:** environment as stated, what was recorded, passages, limitations, records with flags. **"Ask SI about …":** opens Ask SI with a prefilled question. **Not yet integrated:** relevant research listed as such, with no data. | `dashboard/si.html` |
+| Insights & Gaps | **Matrix:** prevention, detection, suppression and habitats, each "shows / cannot establish" statement with sources. **Charts:** oxygen and pressure range charts with labelled reference atmospheres from the challenge statement; palette validated for dark mode, dashed and labelled reference lines, hover titles. **Also:** comparison table and open questions taken from the limitations' "not known" fields. | `dashboard/si.html` |
+| Ingestion | **New maintainer staging tool:** provenance required; byte-for-byte copies with SHA-256 checks; CSV profiling (encoding, lost header characters, mixed types, `~`, ranges, leading zeros, blanks, duplicates); ingestion report with a review checklist; `--verify`. It never writes to the store. Integration remains a reviewed pull request (the bundle generator is still missing). | `ingest/stage.mjs`, `ingest/stage.test.mjs`, `ingest/README.md` (new) |
+| Evaluation | The report records each answer's Evidence Support level. | `worker/scripts/real_eval.mjs` |
+
+Tests:
+- **New:** `worker/test/support.test.mjs` (11) and `ingest/stage.test.mjs` (7).
+- **Rewritten for the new UI:** `si-integration/test_si_dashboard.py` (51 checks). It covers:
+  - overview accuracy;
+  - Ask SI in three states, including a mock answer through the real pipeline;
+  - source dialogs and markup escaping;
+  - explorer search and insights;
+  - no external requests, and no overflow at 5 widths.
+- **Updated:** `si-integration/test_pages_site.py` (new tab names) and `worker/test/real_eval.test.mjs` (examples allowed, never benchmarks).
+- **Local wrapper:** `si-integration/local_worker_server.mjs` gains a test-only `--mock-ai` mode.
+
+`worker/package.json`: `1.0.0-rc.7`.
+
+---
+
+# r6 (2026-11-15)
 
 ## r6 (2026-11-15): the two failures of real-model evaluation run #4
 Run #4 (main `379b943`): Q1–Q4 PASS; Q5 and Q6 FAIL. **Not yet verified against the real model.** No validator rule was relaxed. Q1–Q4 prompts, JSON schema and evidence packs are byte-identical to before (tested).

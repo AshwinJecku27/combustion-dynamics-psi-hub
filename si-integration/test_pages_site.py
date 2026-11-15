@@ -36,7 +36,7 @@ async def main():
             r = await pg.goto(origin + BASE + 'si/'); await pg.wait_for_timeout(300)
             check(r.status == 200, f'{BASE}si/ returns 200')
             tabs = await pg.locator('#nav button').all_inner_texts()
-            check(tabs == ['Intelligence Overview', 'Ask SI', 'Investigation Explorer', 'Comparisons & Insights'], f'{BASE}si/ renders the SI dashboard: {tabs}')
+            check(tabs == ['Overview', 'Ask SI', 'Investigations', 'Insights & Gaps'], f'{BASE}si/ renders the SI dashboard: {tabs}')
             for i in range(4):
                 await pg.locator('#nav button').nth(i).click(); await pg.wait_for_timeout(120)
                 check(len(await pg.locator('#main').inner_text()) > 50, f'SI section {i} renders at /si/')
@@ -46,8 +46,8 @@ async def main():
             check(all(u.startswith(origin) for u in reqs), f'no request leaves the site (no API call, no external asset): {[u for u in reqs if not u.startswith(origin)]}')
             check(not any(u.startswith(origin) and r'/v1/' in u for u in reqs), 'no /v1/ request')
             # Original-dashboard link from /si/ must reach the root dashboard, not /si/ itself
-            href = await pg.locator('#nav a', has_text='Original dashboard').get_attribute('href')
-            await pg.locator('#nav a', has_text='Original dashboard').click(); await pg.wait_for_load_state(); await pg.wait_for_timeout(300)
+            href = await pg.locator('a.orig', has_text='Original dashboard').get_attribute('href')
+            await pg.locator('a.orig', has_text='Original dashboard').click(); await pg.wait_for_load_state(); await pg.wait_for_timeout(300)
             check(pg.url == origin + BASE + 'index.html' and 'Habitat Simulator' in await pg.locator('body').inner_text(), f'"Original dashboard" link ({href}) opens the root dashboard: {pg.url}')
             # /si without a trailing slash redirects to /si/ (as GitHub Pages does)
             r = await pg.goto(origin + BASE + 'si'); await pg.wait_for_timeout(200)

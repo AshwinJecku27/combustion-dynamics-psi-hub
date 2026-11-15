@@ -29,6 +29,8 @@ jobs:
         run: node --test si-integration/worker_smoke.test.mjs
       - name: Pages artifact (root unchanged, SI at /si/)
         run: node --test si-integration/pages_site.test.mjs
+      - name: Maintainer ingestion tool (staging only)
+        run: node --test si/ingest/stage.test.mjs
       - name: Evaluation script tests
         working-directory: si/worker
         run: npm test
